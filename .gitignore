@@ -10,6 +10,10 @@ dist/
 
 # Raw large dataset archives (the database builder recreates them or uses dictionary.db)
 data/*.zip
+data/*.tei
+data/*.tsv
+data/*.db
+data/models/
 data/webster.json
 data/tdk_v12.sqlite3.db
 
