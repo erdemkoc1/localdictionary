@@ -1,10 +1,12 @@
 import sys
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
 from typing import Optional
 from src.db import DictionaryDB
 from src.history import HistoryManager
+from src.translator import SentenceTranslator
 
 class HistoryWindow(ctk.CTkToplevel):
     def __init__(self, parent, history_manager: HistoryManager, on_select_callback):
@@ -23,14 +25,12 @@ class HistoryWindow(ctk.CTkToplevel):
         self.load_history()
 
     def setup_ui(self):
-        # Header
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.pack(fill="x", padx=16, pady=(14, 8))
 
         lbl = ctk.CTkLabel(top_frame, text="🕒 Arama Geçmişi", font=ctk.CTkFont(size=16, weight="bold"))
         lbl.pack(side="left")
 
-        # Treeview for history
         tree_frame = ctk.CTkFrame(self)
         tree_frame.pack(fill="both", expand=True, padx=16, pady=0)
 
@@ -52,7 +52,6 @@ class HistoryWindow(ctk.CTkToplevel):
 
         self.tree.bind("<Double-1>", lambda e: self.search_selected())
 
-        # Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=16, pady=12)
 
@@ -126,8 +125,8 @@ class TranslatorApp(ctk.CTk):
 
         # Window settings
         self.title("LocalDictionary (TR ⇄ EN) - Portable")
-        self.geometry("980x700")
-        self.minsize(780, 540)
+        self.geometry("1020x730")
+        self.minsize(820, 560)
 
         # Initialize Database & History
         try:
@@ -137,6 +136,7 @@ class TranslatorApp(ctk.CTk):
             return
 
         self.history = HistoryManager()
+        self.sentence_translator = SentenceTranslator()
         self.history_window: Optional[HistoryWindow] = None
 
         # State
@@ -176,7 +176,7 @@ class TranslatorApp(ctk.CTk):
 
         self.sub_label = ctk.CTkLabel(
             self.header_frame, 
-            text="v1.1 (100% Çevrimdışı)", 
+            text="v1.2 (100% Çevrimdışı)", 
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
@@ -204,119 +204,15 @@ class TranslatorApp(ctk.CTk):
         )
         self.history_btn.pack(side="right", padx=(0, 10), pady=12)
 
-        # Direction Mode (Segmented Button)
-        self.dir_selector = ctk.CTkSegmentedButton(
-            self.header_frame,
-            values=["Otomatik", "EN ➔ TR", "TR ➔ EN"],
-            command=lambda val: self.on_search_change()
-        )
-        self.dir_selector.set("Otomatik")
-        self.dir_selector.pack(side="right", padx=15, pady=12)
+        # 2. Main Tabview (Sözlük vs Cümle Çevirisi)
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.pack(fill="both", expand=True, padx=16, pady=(4, 0))
 
-        # 2. Search Box Frame
-        self.search_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.search_frame.pack(fill="x", padx=18, pady=(14, 4))
+        self.tab_dict = self.tabview.add("🔍 Sözlük / Kelime Arama")
+        self.tab_sentence = self.tabview.add("⚡ Cümle Çevirisi (BETA)")
 
-        self.search_entry = ctk.CTkEntry(
-            self.search_frame,
-            placeholder_text="Kelime veya deyim yazın... (Örn: computer, başarı, serendipity, break)",
-            height=42,
-            font=ctk.CTkFont(size=15)
-        )
-        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        self.search_entry.bind("<KeyRelease>", self.on_key_release)
-        self.search_entry.bind("<Return>", lambda e: self.perform_search(self.search_entry.get()))
-
-        self.clear_btn = ctk.CTkButton(
-            self.search_frame,
-            text="✕",
-            width=42,
-            height=42,
-            fg_color=("gray75", "gray30"),
-            hover_color=("gray65", "gray40"),
-            command=self.clear_search
-        )
-        self.clear_btn.pack(side="left", padx=(0, 10))
-
-        self.search_btn = ctk.CTkButton(
-            self.search_frame,
-            text="Ara",
-            width=80,
-            height=42,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            command=lambda: self.perform_search(self.search_entry.get())
-        )
-        self.search_btn.pack(side="left")
-
-        # 2.5 Quick History Chips Frame
-        self.quick_history_frame = ctk.CTkFrame(self, fg_color="transparent", height=28)
-        self.quick_history_frame.pack(fill="x", padx=18, pady=(2, 8))
-        self.quick_history_frame.pack_propagate(False)
-
-        # 3. Main Paned Content
-        self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.content_frame.pack(fill="both", expand=True, padx=18, pady=0)
-
-        # Treeview for results (high performance list)
-        self.tree_frame = ctk.CTkFrame(self.content_frame)
-        self.tree_frame.pack(fill="both", expand=True, pady=(0, 10))
-
-        columns = ("source", "type", "category", "target")
-        self.tree = ttk.Treeview(self.tree_frame, columns=columns, show="headings", selectmode="browse")
-        
-        self.tree.heading("source", text="Kaynak Kelime / İfade")
-        self.tree.heading("type", text="Tür")
-        self.tree.heading("category", text="Kategori")
-        self.tree.heading("target", text="Çeviri / Karşılık")
-
-        self.tree.column("source", width=220, minwidth=140)
-        self.tree.column("type", width=70, minwidth=60, anchor="center")
-        self.tree.column("category", width=140, minwidth=100)
-        self.tree.column("target", width=420, minwidth=200)
-
-        # Scrollbar for treeview
-        self.scrollbar = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=self.scrollbar.set)
-        
-        self.tree.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
-
-        self.tree.bind("<<TreeviewSelect>>", self.on_row_selected)
-        self.tree.bind("<Double-1>", self.copy_selected_translation)
-
-        # 4. Detail / Definition Box
-        self.detail_frame = ctk.CTkFrame(self.content_frame, height=135)
-        self.detail_frame.pack(fill="x", pady=(0, 10))
-        self.detail_frame.pack_propagate(False)
-
-        self.detail_header = ctk.CTkFrame(self.detail_frame, fg_color="transparent")
-        self.detail_header.pack(fill="x", padx=12, pady=(6, 4))
-
-        self.detail_title = ctk.CTkLabel(
-            self.detail_header, 
-            text="Sözlük Tanımı & Bilgi", 
-            font=ctk.CTkFont(size=14, weight="bold")
-        )
-        self.detail_title.pack(side="left")
-
-        self.copy_btn = ctk.CTkButton(
-            self.detail_header,
-            text="Çeviriyi Kopyala",
-            width=110,
-            height=26,
-            font=ctk.CTkFont(size=12),
-            command=self.copy_selected_translation
-        )
-        self.copy_btn.pack(side="right")
-
-        self.detail_text = ctk.CTkTextbox(
-            self.detail_frame, 
-            wrap="word", 
-            font=ctk.CTkFont(size=13),
-            activate_scrollbars=True
-        )
-        self.detail_text.pack(fill="both", expand=True, padx=12, pady=(0, 6))
-        self.detail_text.configure(state="disabled")
+        self.setup_dictionary_tab()
+        self.setup_sentence_tab()
 
         # 5. Bottom Status Bar
         self.status_bar = ctk.CTkFrame(self, height=32, corner_radius=0)
@@ -333,14 +229,275 @@ class TranslatorApp(ctk.CTk):
 
         self.status_right = ctk.CTkLabel(
             self.status_bar, 
-            text="● 1.7 Milyon+ Kayıt (100% Çevrimdışı - B-Tree İndeksli)", 
+            text="● 1.7M+ Sözlük + Offline CPU Çeviri Motoru", 
             font=ctk.CTkFont(size=12),
             text_color="#4CAF50"
         )
         self.status_right.pack(side="right", padx=18)
 
+    # ---------------- TAB 1: DICTIONARY ----------------
+    def setup_dictionary_tab(self):
+        # Direction selector inside tab
+        dir_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent")
+        dir_frame.pack(fill="x", padx=4, pady=(2, 6))
+
+        dir_lbl = ctk.CTkLabel(dir_frame, text="Arama Yönü:", font=ctk.CTkFont(size=12), text_color="gray")
+        dir_lbl.pack(side="left", padx=(0, 8))
+
+        self.dir_selector = ctk.CTkSegmentedButton(
+            dir_frame,
+            values=["Otomatik", "EN ➔ TR", "TR ➔ EN"],
+            command=lambda val: self.on_search_change()
+        )
+        self.dir_selector.set("Otomatik")
+        self.dir_selector.pack(side="left")
+
+        # Search box frame
+        self.search_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent")
+        self.search_frame.pack(fill="x", padx=4, pady=(2, 2))
+
+        self.search_entry = ctk.CTkEntry(
+            self.search_frame,
+            placeholder_text="Kelime veya deyim yazın... (Örn: computer, başarı, serendipity, break)",
+            height=40,
+            font=ctk.CTkFont(size=14)
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.search_entry.bind("<KeyRelease>", self.on_key_release)
+        self.search_entry.bind("<Return>", lambda e: self.perform_search(self.search_entry.get()))
+
+        self.clear_btn = ctk.CTkButton(
+            self.search_frame,
+            text="✕",
+            width=38,
+            height=40,
+            fg_color=("gray75", "gray30"),
+            hover_color=("gray65", "gray40"),
+            command=self.clear_search
+        )
+        self.clear_btn.pack(side="left", padx=(0, 8))
+
+        self.search_btn = ctk.CTkButton(
+            self.search_frame,
+            text="Ara",
+            width=75,
+            height=40,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=lambda: self.perform_search(self.search_entry.get())
+        )
+        self.search_btn.pack(side="left")
+
+        # Quick History Chips Frame
+        self.quick_history_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent", height=26)
+        self.quick_history_frame.pack(fill="x", padx=4, pady=(2, 6))
+        self.quick_history_frame.pack_propagate(False)
+
+        # Content Frame
+        self.content_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent")
+        self.content_frame.pack(fill="both", expand=True, padx=4, pady=0)
+
+        # Treeview for results
+        self.tree_frame = ctk.CTkFrame(self.content_frame)
+        self.tree_frame.pack(fill="both", expand=True, pady=(0, 8))
+
+        columns = ("source", "type", "category", "target")
+        self.tree = ttk.Treeview(self.tree_frame, columns=columns, show="headings", selectmode="browse")
+        
+        self.tree.heading("source", text="Kaynak Kelime / İfade")
+        self.tree.heading("type", text="Tür")
+        self.tree.heading("category", text="Kategori")
+        self.tree.heading("target", text="Çeviri / Karşılık")
+
+        self.tree.column("source", width=220, minwidth=140)
+        self.tree.column("type", width=70, minwidth=60, anchor="center")
+        self.tree.column("category", width=140, minwidth=100)
+        self.tree.column("target", width=420, minwidth=200)
+
+        self.scrollbar = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.tree.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+        self.tree.bind("<<TreeviewSelect>>", self.on_row_selected)
+        self.tree.bind("<Double-1>", self.copy_selected_translation)
+
+        # Detail / Definition Box
+        self.detail_frame = ctk.CTkFrame(self.content_frame, height=130)
+        self.detail_frame.pack(fill="x", pady=(0, 4))
+        self.detail_frame.pack_propagate(False)
+
+        self.detail_header = ctk.CTkFrame(self.detail_frame, fg_color="transparent")
+        self.detail_header.pack(fill="x", padx=10, pady=(4, 2))
+
+        self.detail_title = ctk.CTkLabel(
+            self.detail_header, 
+            text="Sözlük Tanımı & Bilgi", 
+            font=ctk.CTkFont(size=13, weight="bold")
+        )
+        self.detail_title.pack(side="left")
+
+        self.copy_btn = ctk.CTkButton(
+            self.detail_header,
+            text="Çeviriyi Kopyala",
+            width=110,
+            height=24,
+            font=ctk.CTkFont(size=11),
+            command=self.copy_selected_translation
+        )
+        self.copy_btn.pack(side="right")
+
+        self.detail_text = ctk.CTkTextbox(
+            self.detail_frame, 
+            wrap="word", 
+            font=ctk.CTkFont(size=12),
+            activate_scrollbars=True
+        )
+        self.detail_text.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+        self.detail_text.configure(state="disabled")
+
+    # ---------------- TAB 2: SENTENCE TRANSLATION (BETA) ----------------
+    def setup_sentence_tab(self):
+        # Options row
+        opt_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
+        opt_frame.pack(fill="x", padx=6, pady=(4, 8))
+
+        lbl = ctk.CTkLabel(opt_frame, text="Çeviri Yönü:", font=ctk.CTkFont(size=12), text_color="gray")
+        lbl.pack(side="left", padx=(0, 8))
+
+        self.sent_dir_selector = ctk.CTkSegmentedButton(
+            opt_frame,
+            values=["Otomatik Algıla", "İngilizce ➔ Türkçe", "Türkçe ➔ İngilizce"]
+        )
+        self.sent_dir_selector.set("Otomatik Algıla")
+        self.sent_dir_selector.pack(side="left")
+
+        # Source input section
+        src_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
+        src_lbl_frame.pack(fill="x", padx=6, pady=(4, 2))
+
+        ctk.CTkLabel(src_lbl_frame, text="Çevrilecek Metin / Cümle:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+
+        self.sent_input = ctk.CTkTextbox(self.tab_sentence, height=130, font=ctk.CTkFont(size=13), wrap="word")
+        self.sent_input.pack(fill="x", padx=6, pady=(0, 8))
+
+        # Action buttons
+        btn_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=6, pady=(0, 8))
+
+        self.translate_action_btn = ctk.CTkButton(
+            btn_frame,
+            text="⚡ Çevir (Offline CPU)",
+            width=160,
+            height=34,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=self.start_sentence_translation
+        )
+        self.translate_action_btn.pack(side="left", padx=(0, 8))
+
+        self.sent_clear_btn = ctk.CTkButton(
+            btn_frame,
+            text="Temizle",
+            width=80,
+            height=34,
+            fg_color=("gray75", "gray35"),
+            hover_color=("gray65", "gray45"),
+            command=self.clear_sentence_inputs
+        )
+        self.sent_clear_btn.pack(side="left")
+
+        self.sent_loading_lbl = ctk.CTkLabel(
+            btn_frame,
+            text="",
+            font=ctk.CTkFont(size=12),
+            text_color="#3B8ED0"
+        )
+        self.sent_loading_lbl.pack(side="left", padx=12)
+
+        # Target output section
+        tgt_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
+        tgt_lbl_frame.pack(fill="x", padx=6, pady=(4, 2))
+
+        ctk.CTkLabel(tgt_lbl_frame, text="Çeviri Sonucu:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+
+        self.sent_copy_btn = ctk.CTkButton(
+            tgt_lbl_frame,
+            text="Sonucu Kopyala",
+            width=110,
+            height=24,
+            font=ctk.CTkFont(size=11),
+            command=self.copy_sentence_result
+        )
+        self.sent_copy_btn.pack(side="right")
+
+        self.sent_output = ctk.CTkTextbox(self.tab_sentence, height=130, font=ctk.CTkFont(size=13), wrap="word")
+        self.sent_output.pack(fill="both", expand=True, padx=6, pady=(0, 8))
+        self.sent_output.configure(state="disabled")
+
+    def clear_sentence_inputs(self):
+        self.sent_input.delete("1.0", "end")
+        self.sent_output.configure(state="normal")
+        self.sent_output.delete("1.0", "end")
+        self.sent_output.configure(state="disabled")
+        self.sent_loading_lbl.configure(text="")
+
+    def copy_sentence_result(self):
+        content = self.sent_output.get("1.0", "end").strip()
+        if content:
+            self.clipboard_clear()
+            self.clipboard_append(content)
+            old_text = self.sent_copy_btn.cget("text")
+            self.sent_copy_btn.configure(text="Kopyalandı! ✓")
+            self.after(1500, lambda: self.sent_copy_btn.configure(text=old_text))
+
+    def start_sentence_translation(self):
+        text = self.sent_input.get("1.0", "end").strip()
+        if not text:
+            return
+
+        choice = self.sent_dir_selector.get()
+        if choice == "İngilizce ➔ Türkçe":
+            f_code, t_code = "en", "tr"
+        elif choice == "Türkçe ➔ İngilizce":
+            f_code, t_code = "tr", "en"
+        else:
+            f_code, t_code = "auto", "auto"
+
+        self.translate_action_btn.configure(state="disabled")
+        self.sent_loading_lbl.configure(text="⏳ Çevriliyor... (CPU NMT motoru çalışıyor)")
+
+        # Run translation in background thread to avoid freezing GUI
+        threading.Thread(
+            target=self._async_translate_worker,
+            args=(text, f_code, t_code),
+            daemon=True
+        ).start()
+
+    def _async_translate_worker(self, text: str, f_code: str, t_code: str):
+        try:
+            res, detected_from, detected_to = self.sentence_translator.translate(text, f_code, t_code)
+            self.after(0, lambda: self._on_translation_success(res, detected_from, detected_to))
+        except Exception as e:
+            self.after(0, lambda: self._on_translation_error(str(e)))
+
+    def _on_translation_success(self, res: str, f_code: str, t_code: str):
+        self.sent_output.configure(state="normal")
+        self.sent_output.delete("1.0", "end")
+        self.sent_output.insert("1.0", res)
+        self.sent_output.configure(state="disabled")
+
+        self.translate_action_btn.configure(state="normal")
+        dir_label = f"[{f_code.upper()} ➔ {t_code.upper()}]"
+        self.sent_loading_lbl.configure(text=f"✓ Çeviri Tamamlandı {dir_label}")
+        self.status_left.configure(text=f"Cümle çevirisi tamamlandı {dir_label}")
+
+    def _on_translation_error(self, err_msg: str):
+        self.translate_action_btn.configure(state="normal")
+        self.sent_loading_lbl.configure(text=f"Hata: {err_msg[:40]}")
+        messagebox.showerror("Çeviri Hatası", f"Cümle çevirisi sırasında hata oluştu:\n{err_msg}")
+
+    # ---------------- UTILITY / THEME / COMMON ----------------
     def update_quick_history(self):
-        """Update recent search chips under search bar."""
         for child in self.quick_history_frame.winfo_children():
             child.destroy()
 
@@ -371,6 +528,7 @@ class TranslatorApp(ctk.CTk):
             btn.pack(side="left", padx=3)
 
     def quick_search(self, word: str):
+        self.tabview.set("🔍 Sözlük / Kelime Arama")
         self.search_entry.delete(0, "end")
         self.search_entry.insert(0, word)
         self.perform_search(word)
@@ -476,7 +634,6 @@ class TranslatorApp(ctk.CTk):
 
         results, elapsed_ms, detected_dir = self.db.search(query, mode=mode, limit=100)
         
-        # Populate Treeview
         for item in self.tree.get_children():
             self.tree.delete(item)
         
@@ -484,13 +641,11 @@ class TranslatorApp(ctk.CTk):
         for r in results:
             self.tree.insert("", "end", values=(r["source"], r["type"], r["category"], r["target"]))
 
-        # Select first row if exists
         children = self.tree.get_children()
         if children:
             self.tree.selection_set(children[0])
             self.on_row_selected(None)
             
-            # Save to persistent history
             if save_to_history and len(query) >= 2:
                 self.history.add_search(query, detected_dir, len(results))
                 self.update_quick_history()
@@ -500,7 +655,7 @@ class TranslatorApp(ctk.CTk):
         self.status_left.configure(text=f"{len(results)} sonuç bulundu ({elapsed_ms:.1f} ms) — Yön: {detected_dir}")
 
     def show_no_results(self, query: str):
-        self.set_detail_text(f"'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya kelimenin kök halini aratabilirsiniz.")
+        self.set_detail_text(f"'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya üstteki '⚡ Cümle Çevirisi (BETA)' sekmesinden tam cümle çevirisini deneyebilirsiniz.")
 
     def on_row_selected(self, event):
         selected = self.tree.selection()
@@ -514,7 +669,6 @@ class TranslatorApp(ctk.CTk):
         source, wtype, category, target = values
         detail_lines = [f"【{source}】 ➔ {target} ({wtype} - {category})", ""]
         
-        # TDK Turkish definitions
         tdk_defs = self.db.get_tr_definitions(source)
         if not tdk_defs:
             tdk_defs = self.db.get_tr_definitions(target)
@@ -528,7 +682,6 @@ class TranslatorApp(ctk.CTk):
                     detail_lines.append(f"     \"{d['example']}\"{author}")
             detail_lines.append("")
 
-        # Webster English definitions
         webster_def = self.db.get_en_definition(source)
         if not webster_def:
             webster_def = self.db.get_en_definition(target)
