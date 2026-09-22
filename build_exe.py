@@ -51,7 +51,7 @@ def build_and_deploy():
         "Kuruluma gerek yoktur.\n\n"
         "Çalıştırmak için 'localdictionary.exe' dosyasına çift tıklayın.\n\n"
         "İçerik:\n"
-        "- 1.7 Milyon Kayıtlı Çift Yönlü Sözlük (TDK & Webster Dahil)\n"
+        "- 2.2+ Milyon Kayıtlı Çift Yönlü Sözlük & Çekim Motoru (TDK & Webster Dahil)\n"
         "- Kalıcı Arama Geçmişi (Program kapansa dahi saklanır)\n"
         "- Sentaks ve Kural Tabanlı Cümle Çevirisi (BETA - Anlık & Donanımsız)\n"
         "- Koyu (Dark) ve Açık (Light) Tema Desteği\n"

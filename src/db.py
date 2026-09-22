@@ -6,6 +6,148 @@ from src.utils import turkish_lower, get_resource_path
 
 TR_CHARS = set("çğıöşüÇĞİÖŞÜ")
 
+EN_IRREGULAR_LEMMAS = {
+    "went": "go", "gone": "go", "goes": "go", "going": "go",
+    "saw": "see", "seen": "see", "sees": "see", "seeing": "see",
+    "came": "come", "comes": "come", "coming": "come",
+    "made": "make", "makes": "make", "making": "make",
+    "did": "do", "done": "do", "does": "do", "doing": "do",
+    "said": "say", "says": "say", "saying": "say",
+    "got": "get", "gotten": "get", "gets": "get", "getting": "get",
+    "knew": "know", "known": "know", "knows": "know", "knowing": "know",
+    "thought": "think", "thinks": "think", "thinking": "think",
+    "took": "take", "taken": "take", "takes": "take", "taking": "take",
+    "bought": "buy", "buys": "buy", "buying": "buy",
+    "sold": "sell", "sells": "sell", "selling": "sell",
+    "found": "find", "finds": "find", "finding": "find",
+    "told": "tell", "tells": "tell", "telling": "tell",
+    "gave": "give", "given": "give", "gives": "give", "giving": "give",
+    "felt": "feel", "feels": "feel", "feeling": "feel",
+    "became": "become", "becomes": "become", "becoming": "become",
+    "left": "leave", "leaves": "leave", "leaving": "leave",
+    "began": "begin", "begun": "begin", "begins": "begin", "beginning": "begin",
+    "ran": "run", "runs": "run", "running": "run",
+    "wrote": "write", "written": "write", "writes": "write", "writing": "write",
+    "sat": "sit", "sits": "sit", "sitting": "sit",
+    "stood": "stand", "stands": "stand", "standing": "stand",
+    "lost": "lose", "loses": "lose", "losing": "lose",
+    "paid": "pay", "pays": "pay", "paying": "pay",
+    "met": "meet", "meets": "meet", "meeting": "meet",
+    "spoke": "speak", "spoken": "speak", "speaks": "speak", "speaking": "speak",
+    "read": "read", "reads": "read", "reading": "read",
+    "spent": "spend", "spends": "spend", "spending": "spend",
+    "grew": "grow", "grown": "grow", "grows": "grow", "growing": "grow",
+    "won": "win", "wins": "win", "winning": "win",
+    "taught": "teach", "teaches": "teach", "teaching": "teach",
+    "brought": "bring", "brings": "bring", "bringing": "bring",
+    "built": "build", "builds": "build", "building": "build",
+    "fell": "fall", "fallen": "fall", "falls": "fall", "falling": "fall",
+    "better": "good", "best": "good", "worse": "bad", "worst": "bad",
+    "children": "child", "people": "person", "men": "man", "women": "woman",
+    "feet": "foot", "teeth": "tooth", "mice": "mouse"
+}
+
+def get_turkish_candidates(word: str) -> List[str]:
+    w = turkish_lower(word)
+    candidates = []
+    
+    verb_suffixes = [
+        "dıysam", "diysem", "duysam", "düysem",
+        "tıysam", "tiysem", "tuysam", "tüysem",
+        "dıysan", "diysen", "duysan", "düysen",
+        "tıysan", "tiysen", "tuysan", "tüysen",
+        "dıysa", "diyse", "duysa", "düyse",
+        "tıysa", "tiyse", "tuysa", "tüyse",
+        "mıştım", "miştim", "muştum", "müştüm",
+        "acaktım", "ecektim", "acaktın", "ecektin",
+        "ıyordum", "iyordum", "uyordum", "üyordum",
+        "ıyordun", "iyordun", "uyordun", "üyordun",
+        "ıyordu", "iyordu", "uyordu", "üyordu",
+        "saydım", "seydim", "saydın", "seydin",
+        "dığımda", "diğimde", "duğumda", "düğümde",
+        "dıkça", "dikçe", "dukça", "dükçe",
+        "dınız", "diniz", "dunuz", "dünüz",
+        "tınız", "tiniz", "tunuz", "tünüz",
+        "dılar", "diler", "dular", "düler",
+        "tılar", "tiler", "tular", "tüler",
+        "dık", "dik", "duk", "dük",
+        "tık", "tik", "tuk", "tük",
+        "dım", "dim", "dum", "düm",
+        "tım", "tim", "tum", "tüm",
+        "dın", "din", "dun", "dün",
+        "tın", "tin", "tun", "tün",
+        "dı", "di", "du", "dü",
+        "tı", "ti", "tu", "tü",
+        "ıyor", "iyor", "uyor", "üyor",
+        "acak", "ecek", "miş", "mış", "muş", "müş",
+        "ır", "ir", "ur", "ür", "ar", "er"
+    ]
+    for s in verb_suffixes:
+        if w.endswith(s) and len(w) - len(s) >= 2:
+            stem = w[:-len(s)]
+            candidates.append(stem + "mek")
+            candidates.append(stem + "mak")
+            candidates.append(stem)
+
+    noun_suffixes = [
+        "lardan", "lerden", "larda", "lerde", "lara", "lere", "ları", "leri", "ların", "lerin",
+        "ımızdan", "imizden", "umuzdan", "ümüzden",
+        "ınızdan", "inizden", "unuzdan", "ünüzden",
+        "ımdan", "imden", "umdan", "ümden",
+        "ından", "inden", "undan", "ünden",
+        "ımızda", "imizde", "umuzda", "ümüzde",
+        "ınızda", "inizde", "unuzda", "ünüzde",
+        "ımda", "imde", "umda", "ümde",
+        "ında", "inde", "unda", "ünde",
+        "dan", "den", "tan", "ten",
+        "da", "de", "ta", "te",
+        "lar", "ler", "nın", "nin", "nun", "nün",
+        "ya", "ye", "na", "ne", "a", "e",
+        "yı", "yi", "yu", "yü", "nı", "ni", "nu", "nü", "ı", "i", "u", "ü"
+    ]
+    for s in noun_suffixes:
+        if w.endswith(s) and len(w) - len(s) >= 2:
+            stem = w[:-len(s)]
+            candidates.append(stem)
+            if stem.endswith("b"): candidates.append(stem[:-1] + "p")
+            elif stem.endswith("c"): candidates.append(stem[:-1] + "ç")
+            elif stem.endswith("d"): candidates.append(stem[:-1] + "t")
+            elif stem.endswith("ğ"): candidates.append(stem[:-1] + "k")
+
+    return list(dict.fromkeys(candidates))
+
+def get_english_candidates(word: str) -> List[str]:
+    w = word.lower().strip()
+    candidates = []
+    if w in EN_IRREGULAR_LEMMAS:
+        candidates.append(EN_IRREGULAR_LEMMAS[w])
+    
+    if w.endswith("ies") and len(w) > 4:
+        candidates.append(w[:-3] + "y")
+    if w.endswith("es") and len(w) > 3:
+        candidates.append(w[:-2])
+    if w.endswith("s") and len(w) > 2:
+        candidates.append(w[:-1])
+    if w.endswith("ed") and len(w) > 3:
+        candidates.append(w[:-2])
+        candidates.append(w[:-1])
+    if w.endswith("ing") and len(w) > 4:
+        candidates.append(w[:-3])
+        candidates.append(w[:-3] + "e")
+        if len(w) >= 6 and w[-4] == w[-5]:
+            candidates.append(w[:-4])
+    if w.endswith("er") and len(w) > 3:
+        candidates.append(w[:-2])
+        candidates.append(w[:-1])
+    if w.endswith("est") and len(w) > 4:
+        candidates.append(w[:-3])
+        candidates.append(w[:-2])
+    if w.endswith("ly") and len(w) > 3:
+        candidates.append(w[:-2])
+        candidates.append(w[:-2] + "le")
+
+    return list(dict.fromkeys(candidates))
+
 class DictionaryDB:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
@@ -33,21 +175,44 @@ class DictionaryDB:
 
         q_lower = turkish_lower(query)
 
-        # 2. Check exact hit in EN vs TR
+        # 2. Check exact hit in TR or EN bilingual table
+        self.cur.execute("SELECT 1 FROM bilingual WHERE tr_lower = ? LIMIT 1;", (q_lower,))
+        if self.cur.fetchone():
+            return "tr"
+
         self.cur.execute("SELECT 1 FROM bilingual WHERE en_lower = ? LIMIT 1;", (q_lower,))
         if self.cur.fetchone():
             return "en"
 
-        self.cur.execute("SELECT 1 FROM bilingual WHERE tr_lower = ? LIMIT 1;", (q_lower,))
+        # 3. Check official monolingual dictionaries (TDK vs Webster)
+        self.cur.execute("SELECT 1 FROM tr_definitions WHERE word_lower = ? LIMIT 1;", (q_lower,))
         if self.cur.fetchone():
             return "tr"
+
+        self.cur.execute("SELECT 1 FROM en_definitions WHERE word_lower = ? LIMIT 1;", (q_lower,))
+        if self.cur.fetchone():
+            return "en"
+
+        # 4. Check prefix hits comparison
+        upper = q_lower + "\uffff"
+        self.cur.execute("SELECT COUNT(*) FROM (SELECT 1 FROM bilingual WHERE tr_lower >= ? AND tr_lower < ? LIMIT 6);", (q_lower, upper))
+        tr_cnt = self.cur.fetchone()[0]
+
+        self.cur.execute("SELECT COUNT(*) FROM (SELECT 1 FROM bilingual WHERE en_lower >= ? AND en_lower < ? LIMIT 6);", (q_lower, upper))
+        en_cnt = self.cur.fetchone()[0]
+
+        if tr_cnt > en_cnt:
+            return "tr"
+        if en_cnt > tr_cnt:
+            return "en"
 
         # Default fallback to English
         return "en"
 
     def search(self, query: str, mode: str = "auto", limit: int = 100) -> Tuple[List[Dict[str, Any]], float, str]:
         """
-        Search dictionary with sub-millisecond range/exact query.
+        Search dictionary with sub-millisecond range/exact query, morphological root fallback,
+        and official TDK / Webster definition fallback.
         Returns: (results_list, elapsed_ms, detected_direction)
         """
         query = query.strip()
@@ -73,11 +238,19 @@ class DictionaryDB:
         FROM bilingual
         WHERE {src_col} >= ? AND {src_col} < ?
         ORDER BY 
-            CASE 
-                WHEN {src_col} = ? THEN 0
-                WHEN category = 'Common Usage' THEN 1
-                WHEN category = 'General' THEN 2
-                ELSE 3
+            CASE WHEN {src_col} = ? THEN 0 ELSE 1 END,
+            CASE category 
+                WHEN 'Common Usage' THEN 0
+                WHEN 'Temel Çekim' THEN 1
+                WHEN 'İngilizce Düzensiz Fiil' THEN 2
+                WHEN 'İngilizce Derecelendirme' THEN 3
+                WHEN 'İngilizce Düzensiz Çoğul' THEN 4
+                WHEN 'TDK Atasözleri ve Deyimler' THEN 5
+                WHEN 'Wiktionary' THEN 6
+                WHEN 'Wiktionary / Çekim' THEN 7
+                WHEN 'FreeDict' THEN 8
+                WHEN 'General' THEN 9
+                ELSE 10
             END,
             length({src_col}) ASC
         LIMIT ?;
@@ -90,26 +263,35 @@ class DictionaryDB:
         if not raw_rows and mode == "auto":
             alt_is_en = not is_en
             alt_src_col = "en_lower" if alt_is_en else "tr_lower"
-            direction = "en_tr" if alt_is_en else "tr_en"
             alt_sql = f"""
             SELECT en, tr, type, category, {alt_src_col}
             FROM bilingual
             WHERE {alt_src_col} >= ? AND {alt_src_col} < ?
             ORDER BY 
-                CASE 
-                    WHEN {alt_src_col} = ? THEN 0
-                    WHEN category = 'Common Usage' THEN 1
-                    WHEN category = 'General' THEN 2
-                    ELSE 3
+                CASE WHEN {alt_src_col} = ? THEN 0 ELSE 1 END,
+                CASE category 
+                    WHEN 'Common Usage' THEN 0
+                    WHEN 'Temel Çekim' THEN 1
+                    WHEN 'İngilizce Düzensiz Fiil' THEN 2
+                    WHEN 'İngilizce Derecelendirme' THEN 3
+                    WHEN 'İngilizce Düzensiz Çoğul' THEN 4
+                    WHEN 'TDK Atasözleri ve Deyimler' THEN 5
+                    WHEN 'Wiktionary' THEN 6
+                    WHEN 'Wiktionary / Çekim' THEN 7
+                    WHEN 'FreeDict' THEN 8
+                    WHEN 'General' THEN 9
+                    ELSE 10
                 END,
                 length({alt_src_col}) ASC
             LIMIT ?;
             """
             self.cur.execute(alt_sql, (q_lower, upper_bound, q_lower, limit))
-            raw_rows = self.cur.fetchall()
-            is_en = alt_is_en
-
-        elapsed_ms = (time.perf_counter() - t_start) * 1000
+            alt_rows = self.cur.fetchall()
+            if alt_rows:
+                raw_rows = alt_rows
+                is_en = alt_is_en
+                direction = "en_tr" if is_en else "tr_en"
+                src_col = alt_src_col
 
         results = []
         for row in raw_rows:
@@ -121,6 +303,73 @@ class DictionaryDB:
                 "direction": "EN ➔ TR" if is_en else "TR ➔ EN"
             })
 
+        # -------------------------------------------------------------
+        # MORPHOLOGICAL ROOT/LEMMA FALLBACK (if 0 or very few results)
+        # -------------------------------------------------------------
+        if len(results) == 0:
+            if not is_en:
+                # Turkish morphology fallback
+                candidates = get_turkish_candidates(query)
+                for cand in candidates:
+                    cand_upper = cand + "\uffff"
+                    self.cur.execute(sql, (cand, cand_upper, cand, 10))
+                    c_rows = self.cur.fetchall()
+                    if c_rows:
+                        for row in c_rows:
+                            results.append({
+                                "source": f"{query} (Kök: {cand})",
+                                "target": row[0],
+                                "type": f"{row[2] or '-'} (kök türevi)",
+                                "category": "Morfolojik Analiz",
+                                "direction": "TR ➔ EN"
+                            })
+                        break
+            else:
+                # English morphology fallback
+                candidates = get_english_candidates(query)
+                for cand in candidates:
+                    cand_upper = cand + "\uffff"
+                    self.cur.execute(sql, (cand, cand_upper, cand, 10))
+                    c_rows = self.cur.fetchall()
+                    if c_rows:
+                        for row in c_rows:
+                            results.append({
+                                "source": f"{query} (Root: {cand})",
+                                "target": row[1],
+                                "type": f"{row[2] or '-'} (lemma)",
+                                "category": "Morphological Analysis",
+                                "direction": "EN ➔ TR"
+                            })
+                        break
+
+        # -------------------------------------------------------------
+        # MONOLINGUAL DEFINITION FALLBACK (TDK / Webster)
+        # -------------------------------------------------------------
+        if len(results) == 0:
+            # Check TDK
+            tdk_defs = self.get_tr_definitions(query)
+            if tdk_defs:
+                for d in tdk_defs[:5]:
+                    results.append({
+                        "source": query,
+                        "target": d["meaning"],
+                        "type": "TDK Tanım",
+                        "category": "TDK Güncel Sözlük",
+                        "direction": "TR (Tanım)"
+                    })
+            else:
+                # Check Webster
+                webster_def = self.get_en_definition(query)
+                if webster_def:
+                    results.append({
+                        "source": query,
+                        "target": webster_def,
+                        "type": "Webster Def",
+                        "category": "Webster's Dictionary",
+                        "direction": "EN (Definition)"
+                    })
+
+        elapsed_ms = (time.perf_counter() - t_start) * 1000
         return results, elapsed_ms, "EN ➔ TR" if is_en else "TR ➔ EN"
 
     def get_tr_definitions(self, word: str) -> List[Dict[str, Optional[str]]]:

@@ -229,7 +229,7 @@ class TranslatorApp(ctk.CTk):
 
         self.status_right = ctk.CTkLabel(
             self.status_bar, 
-            text="● 1.7M+ Sözlük & Sentaks Motoru (100% Çevrimdışı)", 
+            text="● 2.2M+ Sözlük & Sentaks Motoru (100% Çevrimdışı)", 
             font=ctk.CTkFont(size=12),
             text_color="#4CAF50"
         )
