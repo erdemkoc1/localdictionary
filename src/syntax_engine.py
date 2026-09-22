@@ -71,10 +71,22 @@ COMMON_VERBS_EN_TR = {
     "cost": "mal olmak",
     "sit": "oturmak",
     "stand": "ayakta durmak",
-    "wait": "beklemek",
     "feel": "hissetmek",
     "try": "denemek",
-    "hear": "duymak"
+    "hear": "duymak",
+    "create": "yaratmak",
+    "build": "inşa etmek",
+    "protect": "korumak",
+    "fight": "savaşmak",
+    "win": "kazanmak",
+    "lose": "kaybetmek",
+    "kill": "öldürmek",
+    "die": "ölmek",
+    "change": "değiştirmek",
+    "believe": "inanmak",
+    "follow": "takip etmek",
+    "remember": "hatırlamak",
+    "forget": "unutmak"
 }
 
 COMMON_NOUNS_EN_TR = {
@@ -135,7 +147,23 @@ COMMON_NOUNS_EN_TR = {
     "story": "hikaye",
     "film": "film",
     "movie": "film",
-    "music": "müzik"
+    "music": "müzik",
+    "soldier": "asker",
+    "warrior": "savaşçı",
+    "hero": "kahraman",
+    "leader": "lider",
+    "army": "ordu",
+    "war": "savaş",
+    "peace": "barış",
+    "everything": "her şeyi",
+    "nothing": "hiçbir şey",
+    "everyone": "herkes",
+    "everybody": "herkes",
+    "someone": "biri",
+    "something": "bir şey",
+    "anything": "hiçbir şey",
+    "god": "Tanrı",
+    "jesus": "İsa"
 }
 
 COMMON_ADJECTIVES_EN_TR = {
@@ -166,7 +194,19 @@ COMMON_ADJECTIVES_EN_TR = {
     "long": "uzun",
     "short": "kısa",
     "strong": "güçlü",
-    "weak": "zayıf"
+    "weak": "zayıf",
+    "brave": "cesur",
+    "courageous": "cesur",
+    "great": "harika",
+    "honest": "dürüst",
+    "clever": "akıllı",
+    "wise": "bilge",
+    "kind": "nazik",
+    "polite": "kibar",
+    "free": "özgür",
+    "true": "doğru",
+    "false": "yanlış",
+    "real": "gerçek"
 }
 
 GEOGRAPHIC_NAMES = {
@@ -194,8 +234,59 @@ COMMON_PERSON_NAMES = {
     "ayşe", "ali", "ahmet", "mehmet", "fatma", "emine", "mustafa", 
     "can", "zeynep", "elif", "deniz", "burak", "selin", "erdem", "kemal",
     "john", "mary", "david", "sarah", "michael", "emma", "james", 
-    "anna", "peter", "paul", "tom", "alex", "bob", "lisa", "george"
+    "anna", "peter", "paul", "tom", "alex", "bob", "lisa", "george", "jesus"
 }
+
+ENGLISH_CONTRACTIONS = {
+    r"\bhe's\b": "he is",
+    r"\bshe's\b": "she is",
+    r"\bit's\b": "it is",
+    r"\bi'm\b": "i am",
+    r"\byou're\b": "you are",
+    r"\bwe're\b": "we are",
+    r"\bthey're\b": "they are",
+    r"\bwho's\b": "who is",
+    r"\bwhat's\b": "what is",
+    r"\bthat's\b": "that is",
+    r"\bthere's\b": "there is",
+    r"\bcan't\b": "cannot",
+    r"\bwon't\b": "will not",
+    r"\bdon't\b": "do not",
+    r"\bdoesn't\b": "does not",
+    r"\bdidn't\b": "did not",
+    r"\bisn't\b": "is not",
+    r"\baren't\b": "are not",
+    r"\bwasn't\b": "was not",
+    r"\bweren't\b": "were not",
+    r"\bhaven't\b": "have not",
+    r"\bhasn't\b": "has not",
+    r"\bhadn't\b": "had not",
+    r"\bwouldn't\b": "would not",
+    r"\bcouldn't\b": "could not",
+    r"\bshouldn't\b": "should not",
+    r"\bi've\b": "i have",
+    r"\byou've\b": "you have",
+    r"\bwe've\b": "we have",
+    r"\bthey've\b": "they have",
+    r"\bi'll\b": "i will",
+    r"\byou'll\b": "you will",
+    r"\bhe'll\b": "he will",
+    r"\bshe'll\b": "she will",
+    r"\bwe'll\b": "we will",
+    r"\bthey'll\b": "they will"
+}
+
+def expand_english_contractions(text: str) -> str:
+    res = text
+    for pattern, replacement in ENGLISH_CONTRACTIONS.items():
+        matches = list(re.finditer(pattern, res, flags=re.IGNORECASE))
+        for m in reversed(matches):
+            orig = m.group(0)
+            rep = replacement
+            if orig[0].isupper():
+                rep = rep[0].upper() + rep[1:]
+            res = res[:m.start()] + rep + res[m.end():]
+    return res
 
 # Reverse Lookups (TR -> EN)
 COMMON_VERBS_TR_EN = {v: k for k, v in COMMON_VERBS_EN_TR.items()}
@@ -829,13 +920,21 @@ class SyntaxTranslator:
         # Past -ed
         if token_lower.endswith("ied") and len(token_lower) > 4:
             return (token_lower[:-3] + "y", "past")
-        if token_lower.endswith("ed") and len(token_lower) > 4:
-            # Check if base in common verbs
-            if token_lower[:-1] in COMMON_VERBS_EN_TR:
-                return (token_lower[:-1], "past")
-            elif token_lower[:-2] in COMMON_VERBS_EN_TR:
-                return (token_lower[:-2], "past")
-            return (token_lower[:-2], "past")
+        if token_lower.endswith("ed") and len(token_lower) > 3:
+            cand_e = token_lower[:-1]
+            cand_no_ed = token_lower[:-2]
+            if cand_e in COMMON_VERBS_EN_TR:
+                return (cand_e, "past")
+            if cand_no_ed in COMMON_VERBS_EN_TR:
+                return (cand_no_ed, "past")
+            # Check SQLite dictionary
+            self.cur.execute("SELECT 1 FROM bilingual WHERE en_lower = ? AND type LIKE '%v.%' LIMIT 1;", (cand_e,))
+            if self.cur.fetchone():
+                return (cand_e, "past")
+            self.cur.execute("SELECT 1 FROM bilingual WHERE en_lower = ? AND type LIKE '%v.%' LIMIT 1;", (cand_no_ed,))
+            if self.cur.fetchone():
+                return (cand_no_ed, "past")
+            return (cand_no_ed, "past")
 
         return (token_lower, "present")
 
@@ -848,7 +947,41 @@ class SyntaxTranslator:
             direction = self.detect_language(sentence)
 
         if direction == "en_tr":
-            return self._translate_en_to_tr(sentence)
+            # 1. Expand contractions (e.g. He's -> He is, don't -> do not)
+            norm_sentence = expand_english_contractions(sentence)
+
+            # 2. Check for multi-clause compound sentences (e.g. "... and he ...", "... but she ...")
+            clause_split = re.split(r"(,\s*and\s+|\s+and\s+|,\s*but\s+|\s+but\s+|,\s*because\s+|\s+because\s+|,\s*so\s+|\s+so\s+)", norm_sentence, flags=re.IGNORECASE)
+            if len(clause_split) > 1:
+                translated_clauses = []
+                breakdown = []
+                conj_map = {"and": "ve", "but": "ama", "because": "çünkü", "so": "bu yüzden"}
+                
+                for part in clause_split:
+                    p_clean = part.strip().strip(",").strip().lower()
+                    if p_clean in conj_map:
+                        tr_conj = conj_map[p_clean]
+                        translated_clauses.append(tr_conj)
+                        breakdown.append({"original": part.strip(), "translated": tr_conj, "role": "connector", "pos": "conj"})
+                    elif part.strip():
+                        res_clause = self._translate_en_to_tr(part.strip())
+                        if res_clause["translated_text"]:
+                            c_text = res_clause["translated_text"].rstrip(".!?; ")
+                            if len(translated_clauses) > 0 and c_text:
+                                first_w = c_text.split()[0]
+                                if first_w.lower() in ["o", "ben", "sen", "biz", "siz", "onlar", "bu", "şu"]:
+                                    c_text = turkish_lower(first_w) + c_text[len(first_w):]
+                            translated_clauses.append(c_text)
+                            breakdown.extend(res_clause.get("breakdown", []))
+
+                final_text = " ".join(translated_clauses).strip()
+                if norm_sentence[-1] in ".!?;":
+                    final_text += norm_sentence[-1]
+                if final_text:
+                    final_text = final_text[0].upper() + final_text[1:]
+                return {"translated_text": final_text, "breakdown": breakdown}
+
+            return self._translate_en_to_tr(norm_sentence)
         else:
             return self._translate_tr_to_en(sentence)
 
@@ -885,6 +1018,33 @@ class SyntaxTranslator:
             # 3. Time Adverbs
             if t_lower in TIME_ADVERBS_EN:
                 breakdown.append({"original": token, "translated": TIME_ADVERBS_EN[t_lower], "role": "time", "pos": "adv"})
+                i += 1
+                continue
+
+            # 3b. Intensifiers / Degree Adverbs (e.g. "very", "really", "so", "quite")
+            if t_lower in ["very", "really", "so", "quite", "too"]:
+                int_map = {"very": "çok", "really": "gerçekten", "so": "çok", "quite": "oldukça", "too": "çok"}
+                int_tr = int_map[t_lower]
+                if i + 1 < n and raw_tokens[i+1] not in ".,!?;":
+                    adj_tok = raw_tokens[i+1]
+                    adj_matches = self._lookup_word(adj_tok.lower(), preferred_pos="adj.", is_en=True)
+                    if adj_matches and ("adj." in adj_matches[0][1] or adj_tok.lower() in COMMON_ADJECTIVES_EN_TR):
+                        adj_tr = adj_matches[0][0]
+                        if copula_predicate:
+                            combined = attach_copula_suffix(f"{int_tr} {adj_tr}", copula_predicate)
+                            copula_predicate = None
+                        else:
+                            combined = f"{int_tr} {adj_tr}"
+                        breakdown.append({
+                            "original": f"{token} {adj_tok}",
+                            "translated": combined,
+                            "role": "adjective",
+                            "pos": "deg_adj"
+                        })
+                        i += 2
+                        continue
+
+                breakdown.append({"original": token, "translated": int_tr, "role": "adverbial", "pos": "adv"})
                 i += 1
                 continue
 
@@ -988,9 +1148,16 @@ class SyntaxTranslator:
             if token[0].isupper() and (is_start_token and is_followed_by_verb_or_copula or is_known_name):
                 # Recognized as Proper Name Subject
                 subject_person = "3s"
+                if t_lower in COMMON_NOUNS_EN_TR:
+                    tr_subj = COMMON_NOUNS_EN_TR[t_lower]
+                elif t_lower in GEOGRAPHIC_NAMES:
+                    tr_subj = GEOGRAPHIC_NAMES[t_lower]
+                else:
+                    tr_subj = token
+
                 breakdown.append({
                     "original": token,
-                    "translated": token,
+                    "translated": tr_subj,
                     "role": "subject",
                     "pos": "proper_noun"
                 })
@@ -1070,10 +1237,73 @@ class SyntaxTranslator:
 
             # 10. Articles (a, an, the)
             if t_lower in ["a", "an"]:
+                # Check NP pattern: "a brave soldier" -> adj: brave, noun: soldier
+                if i + 2 < n and raw_tokens[i+2] not in ".,!?;":
+                    cand_adj = raw_tokens[i+1].lower()
+                    cand_noun = raw_tokens[i+2].lower()
+                    adj_matches = self._lookup_word(cand_adj, preferred_pos="adj.", is_en=True)
+                    noun_matches = self._lookup_word(cand_noun, preferred_pos="n.", is_en=True)
+                    if adj_matches and noun_matches and ("adj." in adj_matches[0][1] or cand_adj in COMMON_ADJECTIVES_EN_TR) and ("n." in noun_matches[0][1] or cand_noun in COMMON_NOUNS_EN_TR):
+                        adj_tr = adj_matches[0][0]
+                        noun_tr = noun_matches[0][0]
+                        role = "subject" if i == 0 else "object"
+                        if copula_predicate and role == "object":
+                            noun_tr = attach_copula_suffix(noun_tr, copula_predicate)
+                            copula_predicate = None
+                        combined = f"{adj_tr} bir {noun_tr}"
+                        breakdown.append({
+                            "original": f"{token} {raw_tokens[i+1]} {raw_tokens[i+2]}",
+                            "translated": combined,
+                            "role": role,
+                            "pos": "adj_np"
+                        })
+                        i += 3
+                        continue
+                elif i + 1 < n and raw_tokens[i+1] not in ".,!?;":
+                    cand_noun = raw_tokens[i+1].lower()
+                    noun_matches = self._lookup_word(cand_noun, preferred_pos="n.", is_en=True)
+                    if noun_matches and ("n." in noun_matches[0][1] or cand_noun in COMMON_NOUNS_EN_TR):
+                        noun_tr = noun_matches[0][0]
+                        role = "subject" if i == 0 else "object"
+                        if copula_predicate and role == "object":
+                            noun_tr = attach_copula_suffix(noun_tr, copula_predicate)
+                            copula_predicate = None
+                        combined = f"bir {noun_tr}"
+                        breakdown.append({
+                            "original": f"{token} {raw_tokens[i+1]}",
+                            "translated": combined,
+                            "role": role,
+                            "pos": "indef_np"
+                        })
+                        i += 2
+                        continue
+
                 breakdown.append({"original": token, "translated": "bir", "role": "determiner", "pos": "art"})
                 i += 1
                 continue
             elif t_lower == "the":
+                # Check if followed by adj + noun: "the brave soldier"
+                if i + 2 < n and raw_tokens[i+2] not in ".,!?;":
+                    cand_adj = raw_tokens[i+1].lower()
+                    cand_noun = raw_tokens[i+2].lower()
+                    adj_matches = self._lookup_word(cand_adj, preferred_pos="adj.", is_en=True)
+                    noun_matches = self._lookup_word(cand_noun, preferred_pos="n.", is_en=True)
+                    if adj_matches and noun_matches and ("adj." in adj_matches[0][1] or cand_adj in COMMON_ADJECTIVES_EN_TR) and ("n." in noun_matches[0][1] or cand_noun in COMMON_NOUNS_EN_TR):
+                        adj_tr = adj_matches[0][0]
+                        noun_tr = noun_matches[0][0]
+                        role = "subject" if i == 0 else "object"
+                        combined = f"{adj_tr} {noun_tr}"
+                        if i == 0:
+                            combined = combined.capitalize()
+                            subject_person = "3s"
+                        breakdown.append({
+                            "original": f"{token} {raw_tokens[i+1]} {raw_tokens[i+2]}",
+                            "translated": combined,
+                            "role": role,
+                            "pos": "def_adj_np"
+                        })
+                        i += 3
+                        continue
                 # Check if it starts the sentence as subject determiner: "The doctor..."
                 if i == 0 and i + 1 < n:
                     noun = raw_tokens[i+1]
@@ -1129,9 +1359,15 @@ class SyntaxTranslator:
                 continue
 
             # 12. Nouns and Adjectives
-            is_noun_context = (prev_role in ["determiner", "adjective"])
-            pref_pos = "n." if is_noun_context else None
-            matches = self._lookup_word(t_lower, preferred_pos=pref_pos, is_en=True)
+            next_t = raw_tokens[i+1].lower() if i + 1 < n else ""
+            has_following_noun = (next_t and next_t not in ".,!?;")
+            cand_adj_matches = self._lookup_word(t_lower, preferred_pos="adj.", is_en=True)
+            if cand_adj_matches and ("adj." in cand_adj_matches[0][1] or t_lower in COMMON_ADJECTIVES_EN_TR) and has_following_noun:
+                matches = cand_adj_matches
+            else:
+                is_noun_context = (prev_role in ["determiner", "adjective"])
+                pref_pos = "n." if is_noun_context else None
+                matches = self._lookup_word(t_lower, preferred_pos=pref_pos, is_en=True)
 
             if matches:
                 top_tr = matches[0][0]
