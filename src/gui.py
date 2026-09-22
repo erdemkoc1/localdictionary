@@ -6,7 +6,7 @@ import customtkinter as ctk
 from typing import Optional
 from src.db import DictionaryDB
 from src.history import HistoryManager
-from src.translator import SentenceTranslator
+from src.syntax_engine import SyntaxTranslator
 
 class HistoryWindow(ctk.CTkToplevel):
     def __init__(self, parent, history_manager: HistoryManager, on_select_callback):
@@ -125,10 +125,10 @@ class TranslatorApp(ctk.CTk):
 
         # Window settings
         self.title("LocalDictionary (TR ⇄ EN) - Portable")
-        self.geometry("1020x730")
-        self.minsize(820, 560)
+        self.geometry("1040x740")
+        self.minsize(840, 580)
 
-        # Initialize Database & History
+        # Initialize Database, History, and Syntax Engine
         try:
             self.db = DictionaryDB()
         except Exception as e:
@@ -136,7 +136,7 @@ class TranslatorApp(ctk.CTk):
             return
 
         self.history = HistoryManager()
-        self.sentence_translator = SentenceTranslator()
+        self.syntax_translator = SyntaxTranslator()
         self.history_window: Optional[HistoryWindow] = None
 
         # State
@@ -176,7 +176,7 @@ class TranslatorApp(ctk.CTk):
 
         self.sub_label = ctk.CTkLabel(
             self.header_frame, 
-            text="v1.2 (100% Çevrimdışı)", 
+            text="v1.3 (100% Çevrimdışı)", 
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
@@ -209,7 +209,7 @@ class TranslatorApp(ctk.CTk):
         self.tabview.pack(fill="both", expand=True, padx=16, pady=(4, 0))
 
         self.tab_dict = self.tabview.add("🔍 Sözlük / Kelime Arama")
-        self.tab_sentence = self.tabview.add("⚡ Cümle Çevirisi (BETA)")
+        self.tab_sentence = self.tabview.add("⚡ Cümle & Sentaks Çevirisi (BETA)")
 
         self.setup_dictionary_tab()
         self.setup_sentence_tab()
@@ -229,7 +229,7 @@ class TranslatorApp(ctk.CTk):
 
         self.status_right = ctk.CTkLabel(
             self.status_bar, 
-            text="● 1.7M+ Sözlük + Offline CPU Çeviri Motoru", 
+            text="● 1.7M+ Sözlük & Sentaks Motoru (100% Çevrimdışı)", 
             font=ctk.CTkFont(size=12),
             text_color="#4CAF50"
         )
@@ -237,7 +237,6 @@ class TranslatorApp(ctk.CTk):
 
     # ---------------- TAB 1: DICTIONARY ----------------
     def setup_dictionary_tab(self):
-        # Direction selector inside tab
         dir_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent")
         dir_frame.pack(fill="x", padx=4, pady=(2, 6))
 
@@ -356,11 +355,11 @@ class TranslatorApp(ctk.CTk):
         self.detail_text.pack(fill="both", expand=True, padx=10, pady=(0, 6))
         self.detail_text.configure(state="disabled")
 
-    # ---------------- TAB 2: SENTENCE TRANSLATION (BETA) ----------------
+    # ---------------- TAB 2: SENTENCE & SYNTAX TRANSLATION (BETA) ----------------
     def setup_sentence_tab(self):
         # Options row
         opt_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
-        opt_frame.pack(fill="x", padx=6, pady=(4, 8))
+        opt_frame.pack(fill="x", padx=6, pady=(4, 6))
 
         lbl = ctk.CTkLabel(opt_frame, text="Çeviri Yönü:", font=ctk.CTkFont(size=12), text_color="gray")
         lbl.pack(side="left", padx=(0, 8))
@@ -374,22 +373,22 @@ class TranslatorApp(ctk.CTk):
 
         # Source input section
         src_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
-        src_lbl_frame.pack(fill="x", padx=6, pady=(4, 2))
+        src_lbl_frame.pack(fill="x", padx=6, pady=(2, 2))
 
-        ctk.CTkLabel(src_lbl_frame, text="Çevrilecek Metin / Cümle:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+        ctk.CTkLabel(src_lbl_frame, text="Çevrilecek Cümle / Metin:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
 
-        self.sent_input = ctk.CTkTextbox(self.tab_sentence, height=130, font=ctk.CTkFont(size=13), wrap="word")
-        self.sent_input.pack(fill="x", padx=6, pady=(0, 8))
+        self.sent_input = ctk.CTkTextbox(self.tab_sentence, height=75, font=ctk.CTkFont(size=13), wrap="word")
+        self.sent_input.pack(fill="x", padx=6, pady=(0, 6))
 
         # Action buttons
         btn_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=6, pady=(0, 8))
+        btn_frame.pack(fill="x", padx=6, pady=(0, 6))
 
         self.translate_action_btn = ctk.CTkButton(
             btn_frame,
-            text="⚡ Çevir (Offline CPU)",
-            width=160,
-            height=34,
+            text="⚡ Çevir (Sentaks & Sözlük Motoru)",
+            width=220,
+            height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self.start_sentence_translation
         )
@@ -397,9 +396,9 @@ class TranslatorApp(ctk.CTk):
 
         self.sent_clear_btn = ctk.CTkButton(
             btn_frame,
-            text="Temizle",
-            width=80,
-            height=34,
+            text="✕ Temizle",
+            width=85,
+            height=32,
             fg_color=("gray75", "gray35"),
             hover_color=("gray65", "gray45"),
             command=self.clear_sentence_inputs
@@ -416,9 +415,9 @@ class TranslatorApp(ctk.CTk):
 
         # Target output section
         tgt_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
-        tgt_lbl_frame.pack(fill="x", padx=6, pady=(4, 2))
+        tgt_lbl_frame.pack(fill="x", padx=6, pady=(2, 2))
 
-        ctk.CTkLabel(tgt_lbl_frame, text="Çeviri Sonucu:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+        ctk.CTkLabel(tgt_lbl_frame, text="Sentaks Düzeltilmiş Çeviri Sonucu:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
 
         self.sent_copy_btn = ctk.CTkButton(
             tgt_lbl_frame,
@@ -430,16 +429,56 @@ class TranslatorApp(ctk.CTk):
         )
         self.sent_copy_btn.pack(side="right")
 
-        self.sent_output = ctk.CTkTextbox(self.tab_sentence, height=130, font=ctk.CTkFont(size=13), wrap="word")
-        self.sent_output.pack(fill="both", expand=True, padx=6, pady=(0, 8))
+        self.sent_output = ctk.CTkTextbox(self.tab_sentence, height=70, font=ctk.CTkFont(size=13, weight="bold"), wrap="word")
+        self.sent_output.pack(fill="x", padx=6, pady=(0, 6))
         self.sent_output.configure(state="disabled")
 
+        # Breakdown section (Interlinear table)
+        breakdown_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
+        breakdown_lbl_frame.pack(fill="x", padx=6, pady=(2, 2))
+
+        ctk.CTkLabel(breakdown_lbl_frame, text="📊 Kelime ve Kalıp Analizi (Sözlük & Gramer Rolleri):", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+
+        self.breakdown_frame = ctk.CTkFrame(self.tab_sentence)
+        self.breakdown_frame.pack(fill="both", expand=True, padx=6, pady=(0, 4))
+
+        b_cols = ("original", "role", "pos", "translated", "alts")
+        self.breakdown_tree = ttk.Treeview(self.breakdown_frame, columns=b_cols, show="headings", selectmode="browse")
+        
+        self.breakdown_tree.heading("original", text="Orijinal Sözcük / Kalıp")
+        self.breakdown_tree.heading("role", text="Gramer Rolü")
+        self.breakdown_tree.heading("pos", text="Kelime Türü")
+        self.breakdown_tree.heading("translated", text="Seçilen Çeviri")
+        self.breakdown_tree.heading("alts", text="Alternatif Anlamlar")
+
+        self.breakdown_tree.column("original", width=160)
+        self.breakdown_tree.column("role", width=110, anchor="center")
+        self.breakdown_tree.column("pos", width=90, anchor="center")
+        self.breakdown_tree.column("translated", width=180)
+        self.breakdown_tree.column("alts", width=250)
+
+        b_scroll = ttk.Scrollbar(self.breakdown_frame, orient="vertical", command=self.breakdown_tree.yview)
+        self.breakdown_tree.configure(yscrollcommand=b_scroll.set)
+        
+        self.breakdown_tree.pack(side="left", fill="both", expand=True)
+        b_scroll.pack(side="right", fill="y")
+
     def clear_sentence_inputs(self):
+        """Completely clears input, output, breakdown, and resets status."""
+        self.sent_input.delete("0.0", "end")
         self.sent_input.delete("1.0", "end")
+        
         self.sent_output.configure(state="normal")
+        self.sent_output.delete("0.0", "end")
         self.sent_output.delete("1.0", "end")
         self.sent_output.configure(state="disabled")
+
+        for item in self.breakdown_tree.get_children():
+            self.breakdown_tree.delete(item)
+
         self.sent_loading_lbl.configure(text="")
+        self.status_left.configure(text="Cümle çevirisi temizlendi.")
+        self.sent_input.focus()
 
     def copy_sentence_result(self):
         content = self.sent_output.get("1.0", "end").strip()
@@ -457,44 +496,38 @@ class TranslatorApp(ctk.CTk):
 
         choice = self.sent_dir_selector.get()
         if choice == "İngilizce ➔ Türkçe":
-            f_code, t_code = "en", "tr"
+            dir_code = "en_tr"
         elif choice == "Türkçe ➔ İngilizce":
-            f_code, t_code = "tr", "en"
+            dir_code = "tr_en"
         else:
-            f_code, t_code = "auto", "auto"
+            dir_code = "auto"
 
-        self.translate_action_btn.configure(state="disabled")
-        self.sent_loading_lbl.configure(text="⏳ Çevriliyor... (CPU NMT motoru çalışıyor)")
-
-        # Run translation in background thread to avoid freezing GUI
-        threading.Thread(
-            target=self._async_translate_worker,
-            args=(text, f_code, t_code),
-            daemon=True
-        ).start()
-
-    def _async_translate_worker(self, text: str, f_code: str, t_code: str):
-        try:
-            res, detected_from, detected_to = self.sentence_translator.translate(text, f_code, t_code)
-            self.after(0, lambda: self._on_translation_success(res, detected_from, detected_to))
-        except Exception as e:
-            self.after(0, lambda: self._on_translation_error(str(e)))
-
-    def _on_translation_success(self, res: str, f_code: str, t_code: str):
+        # Execute instant syntax translation (sub-millisecond)
+        res = self.syntax_translator.translate(text, direction=dir_code)
+        
+        # Display translated sentence
         self.sent_output.configure(state="normal")
+        self.sent_output.delete("0.0", "end")
         self.sent_output.delete("1.0", "end")
-        self.sent_output.insert("1.0", res)
+        self.sent_output.insert("0.0", res["translated_text"])
         self.sent_output.configure(state="disabled")
 
-        self.translate_action_btn.configure(state="normal")
-        dir_label = f"[{f_code.upper()} ➔ {t_code.upper()}]"
-        self.sent_loading_lbl.configure(text=f"✓ Çeviri Tamamlandı {dir_label}")
-        self.status_left.configure(text=f"Cümle çevirisi tamamlandı {dir_label}")
+        # Populate breakdown table
+        for item in self.breakdown_tree.get_children():
+            self.breakdown_tree.delete(item)
 
-    def _on_translation_error(self, err_msg: str):
-        self.translate_action_btn.configure(state="normal")
-        self.sent_loading_lbl.configure(text=f"Hata: {err_msg[:40]}")
-        messagebox.showerror("Çeviri Hatası", f"Cümle çevirisi sırasında hata oluştu:\n{err_msg}")
+        for b in res.get("breakdown", []):
+            alts_str = ", ".join(b.get("alternatives", []))
+            self.breakdown_tree.insert("", "end", values=(
+                b.get("original", ""),
+                b.get("role", ""),
+                b.get("pos", ""),
+                b.get("translated", ""),
+                alts_str
+            ))
+
+        self.sent_loading_lbl.configure(text="✓ Çeviri Tamamlandı")
+        self.status_left.configure(text="Cümle & Sentaks çevirisi tamamlandı.")
 
     # ---------------- UTILITY / THEME / COMMON ----------------
     def update_quick_history(self):
@@ -560,26 +593,27 @@ class TranslatorApp(ctk.CTk):
             sel_bg = "#3b8ed0"
             sel_fg = "#ffffff"
 
-        style.configure(
-            "Treeview",
-            background=bg,
-            foreground=fg,
-            fieldbackground=field_bg,
-            rowheight=26,
-            font=("Segoe UI", 10),
-            borderwidth=0
-        )
-        style.map("Treeview", background=[("selected", sel_bg)], foreground=[("selected", sel_fg)])
-        
-        style.configure(
-            "Treeview.Heading",
-            background=heading_bg,
-            foreground=heading_fg,
-            font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            padding=4
-        )
-        style.map("Treeview.Heading", background=[("active", heading_bg)])
+        for tv_name in ["Treeview"]:
+            style.configure(
+                tv_name,
+                background=bg,
+                foreground=fg,
+                fieldbackground=field_bg,
+                rowheight=26,
+                font=("Segoe UI", 10),
+                borderwidth=0
+            )
+            style.map(tv_name, background=[("selected", sel_bg)], foreground=[("selected", sel_fg)])
+            
+            style.configure(
+                f"{tv_name}.Heading",
+                background=heading_bg,
+                foreground=heading_fg,
+                font=("Segoe UI", 10, "bold"),
+                relief="flat",
+                padding=4
+            )
+            style.map(f"{tv_name}.Heading", background=[("active", heading_bg)])
 
     def toggle_theme(self):
         if self.current_theme == "dark":
@@ -655,7 +689,7 @@ class TranslatorApp(ctk.CTk):
         self.status_left.configure(text=f"{len(results)} sonuç bulundu ({elapsed_ms:.1f} ms) — Yön: {detected_dir}")
 
     def show_no_results(self, query: str):
-        self.set_detail_text(f"'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya üstteki '⚡ Cümle Çevirisi (BETA)' sekmesinden tam cümle çevirisini deneyebilirsiniz.")
+        self.set_detail_text(f"'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya üstteki '⚡ Cümle & Sentaks Çevirisi (BETA)' sekmesinden cümle çevirisini deneyebilirsiniz.")
 
     def on_row_selected(self, event):
         selected = self.tree.selection()
@@ -718,6 +752,9 @@ class TranslatorApp(ctk.CTk):
     def destroy(self):
         if hasattr(self, "db") and self.db:
             self.db.close()
+        if hasattr(self, "syntax_translator") and self.syntax_translator:
+            if hasattr(self.syntax_translator, "conn") and self.syntax_translator.conn:
+                self.syntax_translator.conn.close()
         super().destroy()
 
 def run_app():
