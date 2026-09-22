@@ -1,25 +1,143 @@
 import sys
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import customtkinter as ctk
 from typing import Optional
 from src.db import DictionaryDB
+from src.history import HistoryManager
+
+class HistoryWindow(ctk.CTkToplevel):
+    def __init__(self, parent, history_manager: HistoryManager, on_select_callback):
+        super().__init__(parent)
+        self.parent = parent
+        self.history_manager = history_manager
+        self.on_select_callback = on_select_callback
+
+        self.title("Arama Geçmişi")
+        self.geometry("560x420")
+        self.minsize(450, 300)
+        self.transient(parent)
+        self.grab_set()
+
+        self.setup_ui()
+        self.load_history()
+
+    def setup_ui(self):
+        # Header
+        top_frame = ctk.CTkFrame(self, fg_color="transparent")
+        top_frame.pack(fill="x", padx=16, pady=(14, 8))
+
+        lbl = ctk.CTkLabel(top_frame, text="🕒 Arama Geçmişi", font=ctk.CTkFont(size=16, weight="bold"))
+        lbl.pack(side="left")
+
+        # Treeview for history
+        tree_frame = ctk.CTkFrame(self)
+        tree_frame.pack(fill="both", expand=True, padx=16, pady=0)
+
+        columns = ("query", "direction", "time")
+        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
+        self.tree.heading("query", text="Aranan Kelime / İfade")
+        self.tree.heading("direction", text="Yön")
+        self.tree.heading("time", text="Son Arama Tarihi")
+
+        self.tree.column("query", width=220)
+        self.tree.column("direction", width=90, anchor="center")
+        self.tree.column("time", width=180, anchor="center")
+
+        scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        self.tree.bind("<Double-1>", lambda e: self.search_selected())
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=12)
+
+        self.search_btn = ctk.CTkButton(
+            btn_frame, 
+            text="Seçileni Ara", 
+            width=110,
+            command=self.search_selected
+        )
+        self.search_btn.pack(side="left", padx=(0, 8))
+
+        self.delete_btn = ctk.CTkButton(
+            btn_frame, 
+            text="Sil", 
+            width=80,
+            fg_color=("gray75", "gray35"),
+            hover_color=("gray65", "gray45"),
+            command=self.delete_selected
+        )
+        self.delete_btn.pack(side="left", padx=(0, 8))
+
+        self.clear_btn = ctk.CTkButton(
+            btn_frame, 
+            text="Tümünü Temizle", 
+            width=120,
+            fg_color="#D32F2F",
+            hover_color="#B71C1C",
+            command=self.clear_all
+        )
+        self.clear_btn.pack(side="right")
+
+    def load_history(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        items = self.history_manager.get_recent(limit=100)
+        for it in items:
+            self.tree.insert("", "end", values=(it["query"], it["direction"], it.get("search_time", "-")))
+
+    def search_selected(self):
+        selected = self.tree.selection()
+        if not selected:
+            return
+        values = self.tree.item(selected[0], "values")
+        if values:
+            query = values[0]
+            self.on_select_callback(query)
+            self.destroy()
+
+    def delete_selected(self):
+        selected = self.tree.selection()
+        if not selected:
+            return
+        values = self.tree.item(selected[0], "values")
+        if values:
+            query = values[0]
+            self.history_manager.delete_search(query)
+            self.load_history()
+            self.parent.update_quick_history()
+
+    def clear_all(self):
+        if messagebox.askyesno("Geçmişi Temizle", "Tüm arama geçmişiniz kalıcı olarak silinecek. Onaylıyor musunuz?", parent=self):
+            self.history_manager.clear_all()
+            self.load_history()
+            self.parent.update_quick_history()
+
 
 class TranslatorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         # Window settings
-        self.title("Açık Çeviri & Sözlük (TR ⇄ EN) - Portable")
-        self.geometry("980x680")
-        self.minsize(780, 520)
+        self.title("LocalDictionary (TR ⇄ EN) - Portable")
+        self.geometry("980x700")
+        self.minsize(780, 540)
 
-        # Initialize Database
+        # Initialize Database & History
         try:
             self.db = DictionaryDB()
         except Exception as e:
             self.show_fatal_error(str(e))
             return
+
+        self.history = HistoryManager()
+        self.history_window: Optional[HistoryWindow] = None
 
         # State
         self.current_theme = "dark"
@@ -32,10 +150,11 @@ class TranslatorApp(ctk.CTk):
         # Setup GUI Components
         self.setup_ui()
         self.apply_treeview_theme()
+        self.update_quick_history()
 
         # Initial search hint
         self.search_entry.focus()
-        self.perform_search("welcome")
+        self.perform_search("welcome", save_to_history=False)
 
     def show_fatal_error(self, msg: str):
         lbl = ctk.CTkLabel(self, text=f"Hata: {msg}", text_color="red", font=("Arial", 16))
@@ -50,14 +169,14 @@ class TranslatorApp(ctk.CTk):
         # App Title & Subtitle
         self.title_label = ctk.CTkLabel(
             self.header_frame, 
-            text="AÇIK ÇEVİRİ", 
+            text="LOCALDICTIONARY", 
             font=ctk.CTkFont(size=18, weight="bold")
         )
         self.title_label.pack(side="left", padx=(18, 5), pady=12)
 
         self.sub_label = ctk.CTkLabel(
             self.header_frame, 
-            text="v1.0 (100% Çevrimdışı)", 
+            text="v1.1 (100% Çevrimdışı)", 
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
@@ -73,6 +192,18 @@ class TranslatorApp(ctk.CTk):
         )
         self.theme_btn.pack(side="right", padx=16, pady=12)
 
+        # History Button
+        self.history_btn = ctk.CTkButton(
+            self.header_frame,
+            text="🕒 Geçmiş",
+            width=85,
+            height=30,
+            fg_color=("gray75", "gray30"),
+            hover_color=("gray65", "gray40"),
+            command=self.open_history_window
+        )
+        self.history_btn.pack(side="right", padx=(0, 10), pady=12)
+
         # Direction Mode (Segmented Button)
         self.dir_selector = ctk.CTkSegmentedButton(
             self.header_frame,
@@ -84,7 +215,7 @@ class TranslatorApp(ctk.CTk):
 
         # 2. Search Box Frame
         self.search_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.search_frame.pack(fill="x", padx=18, pady=(14, 10))
+        self.search_frame.pack(fill="x", padx=18, pady=(14, 4))
 
         self.search_entry = ctk.CTkEntry(
             self.search_frame,
@@ -117,7 +248,12 @@ class TranslatorApp(ctk.CTk):
         )
         self.search_btn.pack(side="left")
 
-        # 3. Main Paned Content (Table on top/left, Definition card on bottom/right)
+        # 2.5 Quick History Chips Frame
+        self.quick_history_frame = ctk.CTkFrame(self, fg_color="transparent", height=28)
+        self.quick_history_frame.pack(fill="x", padx=18, pady=(2, 8))
+        self.quick_history_frame.pack_propagate(False)
+
+        # 3. Main Paned Content
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.content_frame.pack(fill="both", expand=True, padx=18, pady=0)
 
@@ -149,12 +285,12 @@ class TranslatorApp(ctk.CTk):
         self.tree.bind("<Double-1>", self.copy_selected_translation)
 
         # 4. Detail / Definition Box
-        self.detail_frame = ctk.CTkFrame(self.content_frame, height=140)
+        self.detail_frame = ctk.CTkFrame(self.content_frame, height=135)
         self.detail_frame.pack(fill="x", pady=(0, 10))
         self.detail_frame.pack_propagate(False)
 
         self.detail_header = ctk.CTkFrame(self.detail_frame, fg_color="transparent")
-        self.detail_header.pack(fill="x", padx=12, pady=(8, 4))
+        self.detail_header.pack(fill="x", padx=12, pady=(6, 4))
 
         self.detail_title = ctk.CTkLabel(
             self.detail_header, 
@@ -179,7 +315,7 @@ class TranslatorApp(ctk.CTk):
             font=ctk.CTkFont(size=13),
             activate_scrollbars=True
         )
-        self.detail_text.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        self.detail_text.pack(fill="both", expand=True, padx=12, pady=(0, 6))
         self.detail_text.configure(state="disabled")
 
         # 5. Bottom Status Bar
@@ -202,6 +338,48 @@ class TranslatorApp(ctk.CTk):
             text_color="#4CAF50"
         )
         self.status_right.pack(side="right", padx=18)
+
+    def update_quick_history(self):
+        """Update recent search chips under search bar."""
+        for child in self.quick_history_frame.winfo_children():
+            child.destroy()
+
+        recent = self.history.get_recent(limit=6)
+        if not recent:
+            return
+
+        lbl = ctk.CTkLabel(
+            self.quick_history_frame, 
+            text="Son Aramalar:", 
+            font=ctk.CTkFont(size=11), 
+            text_color="gray"
+        )
+        lbl.pack(side="left", padx=(0, 6))
+
+        for r in recent:
+            q = r["query"]
+            btn = ctk.CTkButton(
+                self.quick_history_frame,
+                text=q,
+                height=22,
+                font=ctk.CTkFont(size=11),
+                fg_color=("gray85", "gray25"),
+                text_color=("gray10", "gray90"),
+                hover_color=("gray75", "gray35"),
+                command=lambda word=q: self.quick_search(word)
+            )
+            btn.pack(side="left", padx=3)
+
+    def quick_search(self, word: str):
+        self.search_entry.delete(0, "end")
+        self.search_entry.insert(0, word)
+        self.perform_search(word)
+
+    def open_history_window(self):
+        if self.history_window is None or not self.history_window.winfo_exists():
+            self.history_window = HistoryWindow(self, self.history, self.quick_search)
+        else:
+            self.history_window.focus()
 
     def apply_treeview_theme(self):
         style = ttk.Style()
@@ -258,14 +436,12 @@ class TranslatorApp(ctk.CTk):
         self.apply_treeview_theme()
 
     def on_key_release(self, event):
-        # Ignore navigation keys
         if event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Control_L", "Control_R"):
             return
         
         if self.debounce_timer:
             self.after_cancel(self.debounce_timer)
         
-        # Debounce live search by 180ms
         self.debounce_timer = self.after(180, self.on_search_change)
 
     def on_search_change(self):
@@ -284,7 +460,7 @@ class TranslatorApp(ctk.CTk):
         self.current_results.clear()
         self.set_detail_text("")
 
-    def perform_search(self, query: str):
+    def perform_search(self, query: str, save_to_history: bool = True):
         query = query.strip()
         if not query:
             self.clear_results()
@@ -313,6 +489,11 @@ class TranslatorApp(ctk.CTk):
         if children:
             self.tree.selection_set(children[0])
             self.on_row_selected(None)
+            
+            # Save to persistent history
+            if save_to_history and len(query) >= 2:
+                self.history.add_search(query, detected_dir, len(results))
+                self.update_quick_history()
         else:
             self.show_no_results(query)
 
@@ -331,11 +512,9 @@ class TranslatorApp(ctk.CTk):
             return
 
         source, wtype, category, target = values
-        
-        # Build explanation/definitions
         detail_lines = [f"【{source}】 ➔ {target} ({wtype} - {category})", ""]
         
-        # Check TDK Turkish definitions
+        # TDK Turkish definitions
         tdk_defs = self.db.get_tr_definitions(source)
         if not tdk_defs:
             tdk_defs = self.db.get_tr_definitions(target)
@@ -349,7 +528,7 @@ class TranslatorApp(ctk.CTk):
                     detail_lines.append(f"     \"{d['example']}\"{author}")
             detail_lines.append("")
 
-        # Check Webster English definitions
+        # Webster English definitions
         webster_def = self.db.get_en_definition(source)
         if not webster_def:
             webster_def = self.db.get_en_definition(target)
