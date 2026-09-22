@@ -34,14 +34,18 @@ def build_and_deploy():
         print("HATA: PyInstaller derleme başarısız oldu!")
         sys.exit(res.returncode)
 
-    # 2. Copy dictionary.db
+    # 2. Copy dictionary.db and settings
     src_db = os.path.join(base_dir, "data", "dictionary.db")
     dest_data_dir = os.path.join(dist_app_dir, "data")
     os.makedirs(dest_data_dir, exist_ok=True)
     
-    print("\n1.7M Sözlük veritabanı taşınabilir klasöre ekleniyor...")
+    print("\n2.2M+ Sözlük veritabanı taşınabilir klasöre ekleniyor...")
     shutil.copy2(src_db, os.path.join(dest_data_dir, "dictionary.db"))
     shutil.copy2(src_db, os.path.join(dist_app_dir, "dictionary.db"))
+
+    src_settings = os.path.join(base_dir, "data", "settings.json")
+    if os.path.exists(src_settings):
+        shutil.copy2(src_settings, os.path.join(dest_data_dir, "settings.json"))
 
     # 3. Create README.txt
     readme_content = (
@@ -52,9 +56,10 @@ def build_and_deploy():
         "Çalıştırmak için 'localdictionary.exe' dosyasına çift tıklayın.\n\n"
         "İçerik:\n"
         "- 2.2+ Milyon Kayıtlı Çift Yönlü Sözlük & Çekim Motoru (TDK & Webster Dahil)\n"
+        "- Sağ Tık & Hızlı Seçim Çevirisi (Ctrl + Sağ Tık veya Pano İzleme)\n"
+        "- Ayarlar Sekmesi: Arayüz Dili (TR/EN), Koyu/Açık Tema, Sağ Tık Yapılandırması\n"
         "- Kalıcı Arama Geçmişi (Program kapansa dahi saklanır)\n"
         "- Sentaks ve Kural Tabanlı Cümle Çevirisi (BETA - Anlık & Donanımsız)\n"
-        "- Koyu (Dark) ve Açık (Light) Tema Desteği\n"
     )
     with open(os.path.join(dist_app_dir, "README.txt"), "w", encoding="utf-8") as f:
         f.write(readme_content)

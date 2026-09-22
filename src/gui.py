@@ -1,34 +1,43 @@
+import os
 import sys
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
-from typing import Optional
+from typing import Optional, List, Dict, Any
+
 from src.db import DictionaryDB
 from src.history import HistoryManager
 from src.syntax_engine import SyntaxTranslator
+from src.settings import SettingsManager
+from src.quick_translate import QuickTranslatePopup, GlobalQuickTranslateService, attach_context_menu
+
 
 class HistoryWindow(ctk.CTkToplevel):
-    def __init__(self, parent, history_manager: HistoryManager, on_select_callback):
+    def __init__(self, parent, history_manager: HistoryManager, on_select_callback, settings_mgr: SettingsManager):
         super().__init__(parent)
         self.parent = parent
         self.history_manager = history_manager
         self.on_select_callback = on_select_callback
+        self.settings = settings_mgr
 
-        self.title("Arama Geçmişi")
-        self.geometry("560x420")
-        self.minsize(450, 300)
+        self.title(self.settings.get_text("history_btn"))
+        self.geometry("580x430")
+        self.minsize(460, 320)
         self.transient(parent)
         self.grab_set()
 
         self.setup_ui()
         self.load_history()
 
+    def gt(self, key: str) -> str:
+        return self.settings.get_text(key)
+
     def setup_ui(self):
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.pack(fill="x", padx=16, pady=(14, 8))
 
-        lbl = ctk.CTkLabel(top_frame, text="🕒 Arama Geçmişi", font=ctk.CTkFont(size=16, weight="bold"))
+        lbl = ctk.CTkLabel(top_frame, text=self.gt("history_btn"), font=ctk.CTkFont(size=16, weight="bold"))
         lbl.pack(side="left")
 
         tree_frame = ctk.CTkFrame(self)
@@ -36,9 +45,9 @@ class HistoryWindow(ctk.CTkToplevel):
 
         columns = ("query", "direction", "time")
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
-        self.tree.heading("query", text="Aranan Kelime / İfade")
-        self.tree.heading("direction", text="Yön")
-        self.tree.heading("time", text="Son Arama Tarihi")
+        self.tree.heading("query", text=self.gt("col_source"))
+        self.tree.heading("direction", text=self.gt("search_dir_lbl"))
+        self.tree.heading("time", text="Tarih / Time")
 
         self.tree.column("query", width=220)
         self.tree.column("direction", width=90, anchor="center")
@@ -57,7 +66,7 @@ class HistoryWindow(ctk.CTkToplevel):
 
         self.search_btn = ctk.CTkButton(
             btn_frame, 
-            text="Seçileni Ara", 
+            text=self.gt("search_btn"), 
             width=110,
             command=self.search_selected
         )
@@ -65,8 +74,8 @@ class HistoryWindow(ctk.CTkToplevel):
 
         self.delete_btn = ctk.CTkButton(
             btn_frame, 
-            text="Sil", 
-            width=80,
+            text="Sil / Delete", 
+            width=85,
             fg_color=("gray75", "gray35"),
             hover_color=("gray65", "gray45"),
             command=self.delete_selected
@@ -75,8 +84,8 @@ class HistoryWindow(ctk.CTkToplevel):
 
         self.clear_btn = ctk.CTkButton(
             btn_frame, 
-            text="Tümünü Temizle", 
-            width=120,
+            text=self.gt("hist_clear_btn"), 
+            width=130,
             fg_color="#D32F2F",
             hover_color="#B71C1C",
             command=self.clear_all
@@ -123,12 +132,18 @@ class TranslatorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # 1. Load Settings & Configuration
+        self.settings = SettingsManager()
+        self.current_theme = self.settings.get("theme", "dark")
+        ctk.set_appearance_mode(self.current_theme)
+        ctk.set_default_color_theme("blue")
+
         # Window settings
         self.title("LocalDictionary (TR ⇄ EN) - Portable")
-        self.geometry("1040x740")
-        self.minsize(840, 580)
+        self.geometry("1060x760")
+        self.minsize(860, 600)
 
-        # Initialize Database, History, and Syntax Engine
+        # 2. Initialize Database, History, and Syntax Engine
         try:
             self.db = DictionaryDB()
         except Exception as e:
@@ -138,23 +153,30 @@ class TranslatorApp(ctk.CTk):
         self.history = HistoryManager()
         self.syntax_translator = SyntaxTranslator()
         self.history_window: Optional[HistoryWindow] = None
+        self.current_popup: Optional[QuickTranslatePopup] = None
 
-        # State
-        self.current_theme = "dark"
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
-        
         self.debounce_timer: Optional[str] = None
-        self.current_results = []
+        self.current_results: List[Dict[str, Any]] = []
 
-        # Setup GUI Components
+        # 3. Setup GUI Components
         self.setup_ui()
         self.apply_treeview_theme()
         self.update_quick_history()
 
+        # 4. Attach In-App Context Menus
+        self.setup_context_menus()
+
+        # 5. Start Global Quick Translate Service
+        self.quick_service = GlobalQuickTranslateService(self, self.settings, self.db, self.syntax_translator)
+        self.quick_service.start()
+
         # Initial search hint
         self.search_entry.focus()
         self.perform_search("welcome", save_to_history=False)
+
+    def gt(self, key: str) -> str:
+        """Localization helper."""
+        return self.settings.get_text(key)
 
     def show_fatal_error(self, msg: str):
         lbl = ctk.CTkLabel(self, text=f"Hata: {msg}", text_color="red", font=("Arial", 16))
@@ -169,33 +191,35 @@ class TranslatorApp(ctk.CTk):
         # App Title & Subtitle
         self.title_label = ctk.CTkLabel(
             self.header_frame, 
-            text="LOCALDICTIONARY", 
+            text=self.gt("app_title"), 
             font=ctk.CTkFont(size=18, weight="bold")
         )
         self.title_label.pack(side="left", padx=(18, 5), pady=12)
 
         self.sub_label = ctk.CTkLabel(
             self.header_frame, 
-            text="v1.3 (100% Çevrimdışı)", 
+            text=self.gt("app_subtitle"), 
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
         self.sub_label.pack(side="left", padx=0, pady=(15, 12))
 
-        # Theme Switch Button
-        self.theme_btn = ctk.CTkButton(
+        # Settings Button
+        self.settings_btn = ctk.CTkButton(
             self.header_frame, 
-            text="☀️ Açık Tema", 
-            width=95,
+            text=self.gt("settings_btn"), 
+            width=90,
             height=30,
-            command=self.toggle_theme
+            fg_color=("gray75", "gray30"),
+            hover_color=("gray65", "gray40"),
+            command=self.open_settings_tab
         )
-        self.theme_btn.pack(side="right", padx=16, pady=12)
+        self.settings_btn.pack(side="right", padx=16, pady=12)
 
         # History Button
         self.history_btn = ctk.CTkButton(
             self.header_frame,
-            text="🕒 Geçmiş",
+            text=self.gt("history_btn"),
             width=85,
             height=30,
             fg_color=("gray75", "gray30"),
@@ -204,24 +228,30 @@ class TranslatorApp(ctk.CTk):
         )
         self.history_btn.pack(side="right", padx=(0, 10), pady=12)
 
-        # 2. Main Tabview (Sözlük vs Cümle Çevirisi)
+        # 2. Main Tabview
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(fill="both", expand=True, padx=16, pady=(4, 0))
 
-        self.tab_dict = self.tabview.add("🔍 Sözlük / Kelime Arama")
-        self.tab_sentence = self.tabview.add("⚡ Cümle & Sentaks Çevirisi (BETA)")
+        self.tab_dict_name = self.gt("tab_dict")
+        self.tab_sentence_name = self.gt("tab_sentence")
+        self.tab_settings_name = self.gt("tab_settings")
+
+        self.tab_dict = self.tabview.add(self.tab_dict_name)
+        self.tab_sentence = self.tabview.add(self.tab_sentence_name)
+        self.tab_settings = self.tabview.add(self.tab_settings_name)
 
         self.setup_dictionary_tab()
         self.setup_sentence_tab()
+        self.setup_settings_tab()
 
-        # 5. Bottom Status Bar
+        # 3. Bottom Status Bar
         self.status_bar = ctk.CTkFrame(self, height=32, corner_radius=0)
         self.status_bar.pack(fill="x", side="bottom")
         self.status_bar.pack_propagate(False)
 
         self.status_left = ctk.CTkLabel(
             self.status_bar, 
-            text="Hazır", 
+            text=self.gt("status_ready"), 
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
@@ -229,7 +259,7 @@ class TranslatorApp(ctk.CTk):
 
         self.status_right = ctk.CTkLabel(
             self.status_bar, 
-            text="● 2.2M+ Sözlük & Sentaks Motoru (100% Çevrimdışı)", 
+            text=self.gt("status_engine_badge"), 
             font=ctk.CTkFont(size=12),
             text_color="#4CAF50"
         )
@@ -240,15 +270,15 @@ class TranslatorApp(ctk.CTk):
         dir_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent")
         dir_frame.pack(fill="x", padx=4, pady=(2, 6))
 
-        dir_lbl = ctk.CTkLabel(dir_frame, text="Arama Yönü:", font=ctk.CTkFont(size=12), text_color="gray")
-        dir_lbl.pack(side="left", padx=(0, 8))
+        self.dict_dir_lbl = ctk.CTkLabel(dir_frame, text=self.gt("search_dir_lbl"), font=ctk.CTkFont(size=12), text_color="gray")
+        self.dict_dir_lbl.pack(side="left", padx=(0, 8))
 
         self.dir_selector = ctk.CTkSegmentedButton(
             dir_frame,
-            values=["Otomatik", "EN ➔ TR", "TR ➔ EN"],
+            values=[self.gt("dir_auto"), self.gt("dir_en_tr"), self.gt("dir_tr_en")],
             command=lambda val: self.on_search_change()
         )
-        self.dir_selector.set("Otomatik")
+        self.dir_selector.set(self.gt("dir_auto"))
         self.dir_selector.pack(side="left")
 
         # Search box frame
@@ -257,7 +287,7 @@ class TranslatorApp(ctk.CTk):
 
         self.search_entry = ctk.CTkEntry(
             self.search_frame,
-            placeholder_text="Kelime veya deyim yazın... (Örn: computer, başarı, serendipity, break)",
+            placeholder_text=self.gt("search_placeholder"),
             height=40,
             font=ctk.CTkFont(size=14)
         )
@@ -267,7 +297,7 @@ class TranslatorApp(ctk.CTk):
 
         self.clear_btn = ctk.CTkButton(
             self.search_frame,
-            text="✕",
+            text=self.gt("clear_btn"),
             width=38,
             height=40,
             fg_color=("gray75", "gray30"),
@@ -278,7 +308,7 @@ class TranslatorApp(ctk.CTk):
 
         self.search_btn = ctk.CTkButton(
             self.search_frame,
-            text="Ara",
+            text=self.gt("search_btn"),
             width=75,
             height=40,
             font=ctk.CTkFont(size=13, weight="bold"),
@@ -302,10 +332,10 @@ class TranslatorApp(ctk.CTk):
         columns = ("source", "type", "category", "target")
         self.tree = ttk.Treeview(self.tree_frame, columns=columns, show="headings", selectmode="browse")
         
-        self.tree.heading("source", text="Kaynak Kelime / İfade")
-        self.tree.heading("type", text="Tür")
-        self.tree.heading("category", text="Kategori")
-        self.tree.heading("target", text="Çeviri / Karşılık")
+        self.tree.heading("source", text=self.gt("col_source"))
+        self.tree.heading("type", text=self.gt("col_type"))
+        self.tree.heading("category", text=self.gt("col_category"))
+        self.tree.heading("target", text=self.gt("col_target"))
 
         self.tree.column("source", width=220, minwidth=140)
         self.tree.column("type", width=70, minwidth=60, anchor="center")
@@ -331,15 +361,15 @@ class TranslatorApp(ctk.CTk):
 
         self.detail_title = ctk.CTkLabel(
             self.detail_header, 
-            text="Sözlük Tanımı & Bilgi", 
+            text=self.gt("dict_detail_title"), 
             font=ctk.CTkFont(size=13, weight="bold")
         )
         self.detail_title.pack(side="left")
 
         self.copy_btn = ctk.CTkButton(
             self.detail_header,
-            text="Çeviriyi Kopyala",
-            width=110,
+            text=self.gt("copy_translation_btn"),
+            width=120,
             height=24,
             font=ctk.CTkFont(size=11),
             command=self.copy_selected_translation
@@ -361,21 +391,22 @@ class TranslatorApp(ctk.CTk):
         opt_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
         opt_frame.pack(fill="x", padx=6, pady=(4, 6))
 
-        lbl = ctk.CTkLabel(opt_frame, text="Çeviri Yönü:", font=ctk.CTkFont(size=12), text_color="gray")
-        lbl.pack(side="left", padx=(0, 8))
+        self.sent_dir_lbl = ctk.CTkLabel(opt_frame, text=self.gt("sent_dir_lbl"), font=ctk.CTkFont(size=12), text_color="gray")
+        self.sent_dir_lbl.pack(side="left", padx=(0, 8))
 
         self.sent_dir_selector = ctk.CTkSegmentedButton(
             opt_frame,
-            values=["Otomatik Algıla", "İngilizce ➔ Türkçe", "Türkçe ➔ İngilizce"]
+            values=[self.gt("sent_dir_auto"), self.gt("sent_dir_en_tr"), self.gt("sent_dir_tr_en")]
         )
-        self.sent_dir_selector.set("Otomatik Algıla")
+        self.sent_dir_selector.set(self.gt("sent_dir_auto"))
         self.sent_dir_selector.pack(side="left")
 
         # Source input section
         src_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
         src_lbl_frame.pack(fill="x", padx=6, pady=(2, 2))
 
-        ctk.CTkLabel(src_lbl_frame, text="Çevrilecek Cümle / Metin:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+        self.sent_input_lbl = ctk.CTkLabel(src_lbl_frame, text=self.gt("sent_input_lbl"), font=ctk.CTkFont(size=13, weight="bold"))
+        self.sent_input_lbl.pack(side="left")
 
         self.sent_input = ctk.CTkTextbox(self.tab_sentence, height=75, font=ctk.CTkFont(size=13), wrap="word")
         self.sent_input.pack(fill="x", padx=6, pady=(0, 6))
@@ -386,8 +417,8 @@ class TranslatorApp(ctk.CTk):
 
         self.translate_action_btn = ctk.CTkButton(
             btn_frame,
-            text="⚡ Çevir (Sentaks & Sözlük Motoru)",
-            width=220,
+            text=self.gt("translate_action_btn"),
+            width=230,
             height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self.start_sentence_translation
@@ -396,7 +427,7 @@ class TranslatorApp(ctk.CTk):
 
         self.sent_clear_btn = ctk.CTkButton(
             btn_frame,
-            text="✕ Temizle",
+            text=self.gt("sent_clear_btn"),
             width=85,
             height=32,
             fg_color=("gray75", "gray35"),
@@ -417,12 +448,13 @@ class TranslatorApp(ctk.CTk):
         tgt_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
         tgt_lbl_frame.pack(fill="x", padx=6, pady=(2, 2))
 
-        ctk.CTkLabel(tgt_lbl_frame, text="Sentaks Düzeltilmiş Çeviri Sonucu:", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+        self.sent_output_lbl = ctk.CTkLabel(tgt_lbl_frame, text=self.gt("sent_status_ready"), font=ctk.CTkFont(size=13, weight="bold"))
+        self.sent_output_lbl.pack(side="left")
 
         self.sent_copy_btn = ctk.CTkButton(
             tgt_lbl_frame,
-            text="Sonucu Kopyala",
-            width=110,
+            text=self.gt("sent_copy_btn"),
+            width=120,
             height=24,
             font=ctk.CTkFont(size=11),
             command=self.copy_sentence_result
@@ -437,7 +469,8 @@ class TranslatorApp(ctk.CTk):
         breakdown_lbl_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
         breakdown_lbl_frame.pack(fill="x", padx=6, pady=(2, 2))
 
-        ctk.CTkLabel(breakdown_lbl_frame, text="📊 Kelime ve Kalıp Analizi (Sözlük & Gramer Rolleri):", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+        self.breakdown_lbl = ctk.CTkLabel(breakdown_lbl_frame, text=self.gt("breakdown_title"), font=ctk.CTkFont(size=12, weight="bold"))
+        self.breakdown_lbl.pack(side="left")
 
         self.breakdown_frame = ctk.CTkFrame(self.tab_sentence)
         self.breakdown_frame.pack(fill="both", expand=True, padx=6, pady=(0, 4))
@@ -445,11 +478,11 @@ class TranslatorApp(ctk.CTk):
         b_cols = ("original", "role", "pos", "translated", "alts")
         self.breakdown_tree = ttk.Treeview(self.breakdown_frame, columns=b_cols, show="headings", selectmode="browse")
         
-        self.breakdown_tree.heading("original", text="Orijinal Sözcük / Kalıp")
-        self.breakdown_tree.heading("role", text="Gramer Rolü")
-        self.breakdown_tree.heading("pos", text="Kelime Türü")
-        self.breakdown_tree.heading("translated", text="Seçilen Çeviri")
-        self.breakdown_tree.heading("alts", text="Alternatif Anlamlar")
+        self.breakdown_tree.heading("original", text=self.gt("col_orig"))
+        self.breakdown_tree.heading("role", text=self.gt("col_role"))
+        self.breakdown_tree.heading("pos", text=self.gt("col_pos"))
+        self.breakdown_tree.heading("translated", text=self.gt("col_trans"))
+        self.breakdown_tree.heading("alts", text=self.gt("col_alts"))
 
         self.breakdown_tree.column("original", width=160)
         self.breakdown_tree.column("role", width=110, anchor="center")
@@ -463,8 +496,375 @@ class TranslatorApp(ctk.CTk):
         self.breakdown_tree.pack(side="left", fill="both", expand=True)
         b_scroll.pack(side="right", fill="y")
 
+    # ---------------- TAB 3: SETTINGS ----------------
+    def setup_settings_tab(self):
+        scroll = ctk.CTkScrollableFrame(self.tab_settings, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=8, pady=6)
+
+        # Header Title
+        self.lbl_settings_head = ctk.CTkLabel(
+            scroll, 
+            text=self.gt("settings_header"), 
+            font=ctk.CTkFont(size=17, weight="bold")
+        )
+        self.lbl_settings_head.pack(anchor="w", padx=8, pady=(4, 2))
+
+        self.lbl_settings_sub = ctk.CTkLabel(
+            scroll, 
+            text=self.gt("settings_desc"), 
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        self.lbl_settings_sub.pack(anchor="w", padx=8, pady=(0, 12))
+
+        # CARD 1: Appearance & Theme
+        card_theme = ctk.CTkFrame(scroll)
+        card_theme.pack(fill="x", padx=6, pady=6)
+
+        self.lbl_sec_appearance = ctk.CTkLabel(
+            card_theme, 
+            text=self.gt("sec_appearance"), 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.lbl_sec_appearance.pack(anchor="w", padx=16, pady=(12, 6))
+
+        row_theme = ctk.CTkFrame(card_theme, fg_color="transparent")
+        row_theme.pack(fill="x", padx=16, pady=(0, 14))
+
+        self.lbl_theme = ctk.CTkLabel(row_theme, text=self.gt("theme_lbl"), font=ctk.CTkFont(size=12))
+        self.lbl_theme.pack(side="left", padx=(0, 12))
+
+        cur_t = self.settings.get("theme", "dark")
+        theme_map = {"dark": self.gt("theme_dark"), "light": self.gt("theme_light"), "system": self.gt("theme_system")}
+        self.theme_selector = ctk.CTkSegmentedButton(
+            row_theme,
+            values=[self.gt("theme_dark"), self.gt("theme_light"), self.gt("theme_system")],
+            command=self.on_theme_changed
+        )
+        self.theme_selector.set(theme_map.get(cur_t, self.gt("theme_dark")))
+        self.theme_selector.pack(side="left")
+
+        # CARD 2: Language & Interface
+        card_lang = ctk.CTkFrame(scroll)
+        card_lang.pack(fill="x", padx=6, pady=6)
+
+        self.lbl_sec_lang = ctk.CTkLabel(
+            card_lang, 
+            text=self.gt("sec_language"), 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.lbl_sec_lang.pack(anchor="w", padx=16, pady=(12, 6))
+
+        row_lang = ctk.CTkFrame(card_lang, fg_color="transparent")
+        row_lang.pack(fill="x", padx=16, pady=(0, 14))
+
+        self.lbl_lang = ctk.CTkLabel(row_lang, text=self.gt("lang_lbl"), font=ctk.CTkFont(size=12))
+        self.lbl_lang.pack(side="left", padx=(0, 12))
+
+        cur_l = self.settings.get("language", "tr")
+        self.lang_selector = ctk.CTkSegmentedButton(
+            row_lang,
+            values=[self.gt("lang_tr"), self.gt("lang_en")],
+            command=self.on_language_changed
+        )
+        self.lang_selector.set(self.gt("lang_tr") if cur_l == "tr" else self.gt("lang_en"))
+        self.lang_selector.pack(side="left")
+
+        # CARD 3: Right-Click & Quick Translation
+        card_rc = ctk.CTkFrame(scroll)
+        card_rc.pack(fill="x", padx=6, pady=6)
+
+        self.lbl_sec_rc = ctk.CTkLabel(
+            card_rc, 
+            text=self.gt("sec_right_click"), 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.lbl_sec_rc.pack(anchor="w", padx=16, pady=(12, 4))
+
+        # Switch 1: Enable Quick Translate Popup
+        self.rc_switch = ctk.CTkSwitch(
+            card_rc,
+            text=self.gt("rc_enable_lbl"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=self.on_rc_switch_changed
+        )
+        if self.settings.get("right_click_translate", True):
+            self.rc_switch.select()
+        else:
+            self.rc_switch.deselect()
+        self.rc_switch.pack(anchor="w", padx=16, pady=(6, 2))
+
+        self.lbl_rc_desc = ctk.CTkLabel(
+            card_rc,
+            text=self.gt("rc_enable_desc"),
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        self.lbl_rc_desc.pack(anchor="w", padx=16, pady=(0, 8))
+
+        # Trigger option
+        row_trigger = ctk.CTkFrame(card_rc, fg_color="transparent")
+        row_trigger.pack(fill="x", padx=16, pady=(0, 10))
+
+        self.lbl_trigger = ctk.CTkLabel(row_trigger, text=self.gt("rc_trigger_lbl"), font=ctk.CTkFont(size=12))
+        self.lbl_trigger.pack(side="left", padx=(0, 12))
+
+        cur_trig = self.settings.get("right_click_trigger", "ctrl_right_click")
+        self.trigger_selector = ctk.CTkSegmentedButton(
+            row_trigger,
+            values=[self.gt("trigger_ctrl_rc"), self.gt("trigger_clipboard")],
+            command=self.on_trigger_changed
+        )
+        self.trigger_selector.set(self.gt("trigger_ctrl_rc") if cur_trig == "ctrl_right_click" else self.gt("trigger_clipboard"))
+        self.trigger_selector.pack(side="left")
+
+        # Switch 2: In-App Right Click Context Menu
+        self.inapp_switch = ctk.CTkSwitch(
+            card_rc,
+            text=self.gt("rc_inapp_lbl"),
+            font=ctk.CTkFont(size=12),
+            command=self.on_inapp_switch_changed
+        )
+        if self.settings.get("in_app_context_menu", True):
+            self.inapp_switch.select()
+        else:
+            self.inapp_switch.deselect()
+        self.inapp_switch.pack(anchor="w", padx=16, pady=(4, 2))
+
+        self.lbl_inapp_desc = ctk.CTkLabel(
+            card_rc,
+            text=self.gt("rc_inapp_desc"),
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        self.lbl_inapp_desc.pack(anchor="w", padx=16, pady=(0, 14))
+
+        # CARD 4: History & Storage
+        card_hist = ctk.CTkFrame(scroll)
+        card_hist.pack(fill="x", padx=6, pady=6)
+
+        self.lbl_sec_hist = ctk.CTkLabel(
+            card_hist, 
+            text=self.gt("sec_history"), 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.lbl_sec_hist.pack(anchor="w", padx=16, pady=(12, 4))
+
+        self.hist_save_switch = ctk.CTkSwitch(
+            card_hist,
+            text=self.gt("hist_save_lbl"),
+            font=ctk.CTkFont(size=12),
+            command=self.on_hist_save_changed
+        )
+        if self.settings.get("save_history", True):
+            self.hist_save_switch.select()
+        else:
+            self.hist_save_switch.deselect()
+        self.hist_save_switch.pack(anchor="w", padx=16, pady=(4, 2))
+
+        self.lbl_hist_desc = ctk.CTkLabel(
+            card_hist,
+            text=self.gt("hist_save_desc"),
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        self.lbl_hist_desc.pack(anchor="w", padx=16, pady=(0, 10))
+
+        row_hist_btn = ctk.CTkFrame(card_hist, fg_color="transparent")
+        row_hist_btn.pack(fill="x", padx=16, pady=(0, 14))
+
+        self.btn_clear_hist = ctk.CTkButton(
+            row_hist_btn,
+            text=self.gt("hist_clear_btn"),
+            width=150,
+            height=30,
+            fg_color=("gray75", "gray30"),
+            hover_color=("#D32F2F", "#B71C1C"),
+            command=self.clear_all_history_from_settings
+        )
+        self.btn_clear_hist.pack(side="left")
+
+        # CARD 5: About & System Info
+        card_about = ctk.CTkFrame(scroll)
+        card_about.pack(fill="x", padx=6, pady=6)
+
+        self.lbl_sec_about = ctk.CTkLabel(
+            card_about, 
+            text=self.gt("sec_about"), 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.lbl_sec_about.pack(anchor="w", padx=16, pady=(12, 6))
+
+        for item_key in ["about_ver", "about_db", "about_mode", "about_license"]:
+            lbl = ctk.CTkLabel(card_about, text=f"• {self.gt(item_key)}", font=ctk.CTkFont(size=12))
+            lbl.pack(anchor="w", padx=22, pady=2)
+        
+        ctk.CTkFrame(card_about, height=10, fg_color="transparent").pack()
+
+    # ---------------- SETTINGS ACTIONS ----------------
+    def on_theme_changed(self, choice):
+        if "Koyu" in choice or "Dark" in choice:
+            mode = "dark"
+        elif "Açık" in choice or "Light" in choice:
+            mode = "light"
+        else:
+            mode = "system"
+        self.current_theme = mode
+        ctk.set_appearance_mode(mode)
+        self.settings.set("theme", mode)
+        self.apply_treeview_theme()
+
+    def on_language_changed(self, choice):
+        lang = "tr" if "Türkçe" in choice else "en"
+        self.settings.set("language", lang)
+        self.apply_language()
+
+    def on_rc_switch_changed(self):
+        val = bool(self.rc_switch.get())
+        self.settings.set("right_click_translate", val)
+
+    def on_trigger_changed(self, choice):
+        val = "ctrl_right_click" if "Ctrl" in choice else "clipboard"
+        self.settings.set("right_click_trigger", val)
+
+    def on_inapp_switch_changed(self):
+        val = bool(self.inapp_switch.get())
+        self.settings.set("in_app_context_menu", val)
+
+    def on_hist_save_changed(self):
+        val = bool(self.hist_save_switch.get())
+        self.settings.set("save_history", val)
+
+    def clear_all_history_from_settings(self):
+        if messagebox.askyesno(self.gt("hist_clear_btn"), "Tüm arama geçmişiniz silinsin mi?", parent=self):
+            self.history.clear_all()
+            self.update_quick_history()
+            self.status_left.configure(text=self.gt("hist_cleared_msg"))
+
+    def open_settings_tab(self):
+        self.tabview.set(self.tab_settings_name)
+
+    def apply_language(self):
+        """Dynamically re-labels all GUI elements to the selected language."""
+        # 1. Update Tabs
+        old_dict = self.tab_dict_name
+        old_sent = self.tab_sentence_name
+        old_sett = self.tab_settings_name
+
+        new_dict = self.gt("tab_dict")
+        new_sent = self.gt("tab_sentence")
+        new_sett = self.gt("tab_settings")
+
+        if old_dict != new_dict:
+            self.tabview.rename(old_dict, new_dict)
+            self.tab_dict_name = new_dict
+        if old_sent != new_sent:
+            self.tabview.rename(old_sent, new_sent)
+            self.tab_sentence_name = new_sent
+        if old_sett != new_sett:
+            self.tabview.rename(old_sett, new_sett)
+            self.tab_settings_name = new_sett
+
+        # 2. Header
+        self.title_label.configure(text=self.gt("app_title"))
+        self.sub_label.configure(text=self.gt("app_subtitle"))
+        self.settings_btn.configure(text=self.gt("settings_btn"))
+        self.history_btn.configure(text=self.gt("history_btn"))
+
+        # 3. Dictionary Tab
+        self.dict_dir_lbl.configure(text=self.gt("search_dir_lbl"))
+        cur_d = self.dir_selector.get()
+        self.dir_selector.configure(values=[self.gt("dir_auto"), self.gt("dir_en_tr"), self.gt("dir_tr_en")])
+        self.dir_selector.set(self.gt("dir_auto"))
+        self.search_entry.configure(placeholder_text=self.gt("search_placeholder"))
+        self.search_btn.configure(text=self.gt("search_btn"))
+        self.clear_btn.configure(text=self.gt("clear_btn"))
+        self.tree.heading("source", text=self.gt("col_source"))
+        self.tree.heading("type", text=self.gt("col_type"))
+        self.tree.heading("category", text=self.gt("col_category"))
+        self.tree.heading("target", text=self.gt("col_target"))
+        self.detail_title.configure(text=self.gt("dict_detail_title"))
+        self.copy_btn.configure(text=self.gt("copy_translation_btn"))
+
+        # 4. Sentence Tab
+        self.sent_dir_lbl.configure(text=self.gt("sent_dir_lbl"))
+        self.sent_dir_selector.configure(values=[self.gt("sent_dir_auto"), self.gt("sent_dir_en_tr"), self.gt("sent_dir_tr_en")])
+        self.sent_dir_selector.set(self.gt("sent_dir_auto"))
+        self.sent_input_lbl.configure(text=self.gt("sent_input_lbl"))
+        self.translate_action_btn.configure(text=self.gt("translate_action_btn"))
+        self.sent_clear_btn.configure(text=self.gt("sent_clear_btn"))
+        self.sent_copy_btn.configure(text=self.gt("sent_copy_btn"))
+        self.sent_output_lbl.configure(text=self.gt("sent_status_ready"))
+        self.breakdown_lbl.configure(text=self.gt("breakdown_title"))
+        self.breakdown_tree.heading("original", text=self.gt("col_orig"))
+        self.breakdown_tree.heading("role", text=self.gt("col_role"))
+        self.breakdown_tree.heading("pos", text=self.gt("col_pos"))
+        self.breakdown_tree.heading("translated", text=self.gt("col_trans"))
+        self.breakdown_tree.heading("alts", text=self.gt("col_alts"))
+
+        # 5. Settings Tab
+        self.lbl_settings_head.configure(text=self.gt("settings_header"))
+        self.lbl_settings_sub.configure(text=self.gt("settings_desc"))
+        self.lbl_sec_appearance.configure(text=self.gt("sec_appearance"))
+        self.lbl_theme.configure(text=self.gt("theme_lbl"))
+        self.theme_selector.configure(values=[self.gt("theme_dark"), self.gt("theme_light"), self.gt("theme_system")])
+        cur_t = self.settings.get("theme", "dark")
+        theme_map = {"dark": self.gt("theme_dark"), "light": self.gt("theme_light"), "system": self.gt("theme_system")}
+        self.theme_selector.set(theme_map.get(cur_t, self.gt("theme_dark")))
+
+        self.lbl_sec_lang.configure(text=self.gt("sec_language"))
+        self.lbl_lang.configure(text=self.gt("lang_lbl"))
+        self.lang_selector.configure(values=[self.gt("lang_tr"), self.gt("lang_en")])
+        cur_l = self.settings.get("language", "tr")
+        self.lang_selector.set(self.gt("lang_tr") if cur_l == "tr" else self.gt("lang_en"))
+
+        self.lbl_sec_rc.configure(text=self.gt("sec_right_click"))
+        self.rc_switch.configure(text=self.gt("rc_enable_lbl"))
+        self.lbl_rc_desc.configure(text=self.gt("rc_enable_desc"))
+        self.lbl_trigger.configure(text=self.gt("rc_trigger_lbl"))
+        self.trigger_selector.configure(values=[self.gt("trigger_ctrl_rc"), self.gt("trigger_clipboard")])
+        cur_trig = self.settings.get("right_click_trigger", "ctrl_right_click")
+        self.trigger_selector.set(self.gt("trigger_ctrl_rc") if cur_trig == "ctrl_right_click" else self.gt("trigger_clipboard"))
+        self.inapp_switch.configure(text=self.gt("rc_inapp_lbl"))
+        self.lbl_inapp_desc.configure(text=self.gt("rc_inapp_desc"))
+
+        self.lbl_sec_hist.configure(text=self.gt("sec_history"))
+        self.hist_save_switch.configure(text=self.gt("hist_save_lbl"))
+        self.lbl_hist_desc.configure(text=self.gt("hist_save_desc"))
+        self.btn_clear_hist.configure(text=self.gt("hist_clear_btn"))
+        self.lbl_sec_about.configure(text=self.gt("sec_about"))
+
+        # 6. Status Bar
+        self.status_right.configure(text=self.gt("status_engine_badge"))
+        self.status_left.configure(text=self.gt("status_ready"))
+
+    def setup_context_menus(self):
+        """Attaches right click context menu to all interactive widgets."""
+        attach_context_menu(self.search_entry, on_search=self.quick_search, on_sentence=self.send_to_sentence, get_text_fn=self.gt)
+        attach_context_menu(self.detail_text, on_search=self.quick_search, on_sentence=self.send_to_sentence, get_text_fn=self.gt)
+        attach_context_menu(self.sent_input, on_search=self.quick_search, on_sentence=self.send_to_sentence, get_text_fn=self.gt)
+        attach_context_menu(self.sent_output, on_search=self.quick_search, on_sentence=self.send_to_sentence, get_text_fn=self.gt)
+
+    def show_quick_popup(self, text: str, trans: str, x: int, y: int):
+        try:
+            if hasattr(self, "current_popup") and self.current_popup and self.current_popup.winfo_exists():
+                self.current_popup.destroy()
+            self.current_popup = QuickTranslatePopup(
+                self, text, trans, x, y,
+                on_open_in_dict=lambda q: (self.deiconify(), self.lift(), self.focus_force(), self.quick_search(q))
+            )
+        except Exception as e:
+            print(f"Hızlı çeviri balonu hatası: {e}")
+
+    def send_to_sentence(self, text: str):
+        self.tabview.set(self.tab_sentence_name)
+        self.sent_input.delete("0.0", "end")
+        self.sent_input.delete("1.0", "end")
+        self.sent_input.insert("0.0", text)
+        self.start_sentence_translation()
+
+    # ---------------- SENTENCE TRANSLATION ACTIONS ----------------
     def clear_sentence_inputs(self):
-        """Completely clears input, output, breakdown, and resets status."""
         self.sent_input.delete("0.0", "end")
         self.sent_input.delete("1.0", "end")
         
@@ -477,7 +877,7 @@ class TranslatorApp(ctk.CTk):
             self.breakdown_tree.delete(item)
 
         self.sent_loading_lbl.configure(text="")
-        self.status_left.configure(text="Cümle çevirisi temizlendi.")
+        self.status_left.configure(text=self.gt("sent_clear_btn"))
         self.sent_input.focus()
 
     def copy_sentence_result(self):
@@ -495,24 +895,21 @@ class TranslatorApp(ctk.CTk):
             return
 
         choice = self.sent_dir_selector.get()
-        if choice == "İngilizce ➔ Türkçe":
+        if choice in ("İngilizce ➔ Türkçe", "English ➔ Turkish"):
             dir_code = "en_tr"
-        elif choice == "Türkçe ➔ İngilizce":
+        elif choice in ("Türkçe ➔ İngilizce", "Turkish ➔ English"):
             dir_code = "tr_en"
         else:
             dir_code = "auto"
 
-        # Execute instant syntax translation (sub-millisecond)
         res = self.syntax_translator.translate(text, direction=dir_code)
         
-        # Display translated sentence
         self.sent_output.configure(state="normal")
         self.sent_output.delete("0.0", "end")
         self.sent_output.delete("1.0", "end")
         self.sent_output.insert("0.0", res["translated_text"])
         self.sent_output.configure(state="disabled")
 
-        # Populate breakdown table
         for item in self.breakdown_tree.get_children():
             self.breakdown_tree.delete(item)
 
@@ -526,8 +923,8 @@ class TranslatorApp(ctk.CTk):
                 alts_str
             ))
 
-        self.sent_loading_lbl.configure(text="✓ Çeviri Tamamlandı")
-        self.status_left.configure(text="Cümle & Sentaks çevirisi tamamlandı.")
+        self.sent_loading_lbl.configure(text=self.gt("sent_loading_done"))
+        self.status_left.configure(text=self.gt("sent_status_ready"))
 
     # ---------------- UTILITY / THEME / COMMON ----------------
     def update_quick_history(self):
@@ -540,7 +937,7 @@ class TranslatorApp(ctk.CTk):
 
         lbl = ctk.CTkLabel(
             self.quick_history_frame, 
-            text="Son Aramalar:", 
+            text=self.gt("recent_searches"), 
             font=ctk.CTkFont(size=11), 
             text_color="gray"
         )
@@ -561,14 +958,14 @@ class TranslatorApp(ctk.CTk):
             btn.pack(side="left", padx=3)
 
     def quick_search(self, word: str):
-        self.tabview.set("🔍 Sözlük / Kelime Arama")
+        self.tabview.set(self.tab_dict_name)
         self.search_entry.delete(0, "end")
         self.search_entry.insert(0, word)
         self.perform_search(word)
 
     def open_history_window(self):
         if self.history_window is None or not self.history_window.winfo_exists():
-            self.history_window = HistoryWindow(self, self.history, self.quick_search)
+            self.history_window = HistoryWindow(self, self.history, self.quick_search, self.settings)
         else:
             self.history_window.focus()
 
@@ -576,7 +973,12 @@ class TranslatorApp(ctk.CTk):
         style = ttk.Style()
         style.theme_use("clam")
         
-        if self.current_theme == "dark":
+        mode = self.current_theme
+        if mode == "system":
+            import darkdetect
+            mode = "dark" if darkdetect.isDark() else "light"
+
+        if mode == "dark":
             bg = "#2b2b2b"
             fg = "#f0f0f0"
             field_bg = "#2b2b2b"
@@ -615,18 +1017,6 @@ class TranslatorApp(ctk.CTk):
             )
             style.map(f"{tv_name}.Heading", background=[("active", heading_bg)])
 
-    def toggle_theme(self):
-        if self.current_theme == "dark":
-            self.current_theme = "light"
-            ctk.set_appearance_mode("light")
-            self.theme_btn.configure(text="🌙 Koyu Tema")
-        else:
-            self.current_theme = "dark"
-            ctk.set_appearance_mode("dark")
-            self.theme_btn.configure(text="☀️ Açık Tema")
-        
-        self.apply_treeview_theme()
-
     def on_key_release(self, event):
         if event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Control_L", "Control_R"):
             return
@@ -644,7 +1034,7 @@ class TranslatorApp(ctk.CTk):
         self.search_entry.delete(0, "end")
         self.search_entry.focus()
         self.clear_results()
-        self.status_left.configure(text="Arama temizlendi.")
+        self.status_left.configure(text=self.gt("status_ready"))
 
     def clear_results(self):
         for item in self.tree.get_children():
@@ -659,12 +1049,12 @@ class TranslatorApp(ctk.CTk):
             return
 
         sel_mode = self.dir_selector.get()
-        mode_map = {
-            "Otomatik": "auto",
-            "EN ➔ TR": "en_tr",
-            "TR ➔ EN": "tr_en"
-        }
-        mode = mode_map.get(sel_mode, "auto")
+        if sel_mode in ("EN ➔ TR", "İngilizce ➔ Türkçe"):
+            mode = "en_tr"
+        elif sel_mode in ("TR ➔ EN", "Türkçe ➔ İngilizce"):
+            mode = "tr_en"
+        else:
+            mode = "auto"
 
         results, elapsed_ms, detected_dir = self.db.search(query, mode=mode, limit=100)
         
@@ -680,16 +1070,18 @@ class TranslatorApp(ctk.CTk):
             self.tree.selection_set(children[0])
             self.on_row_selected(None)
             
-            if save_to_history and len(query) >= 2:
+            if save_to_history and len(query) >= 2 and self.settings.get("save_history", True):
                 self.history.add_search(query, detected_dir, len(results))
                 self.update_quick_history()
         else:
             self.show_no_results(query)
 
-        self.status_left.configure(text=f"{len(results)} sonuç bulundu ({elapsed_ms:.1f} ms) — Yön: {detected_dir}")
+        res_msg = self.gt("results_found").format(count=len(results), ms=elapsed_ms, direction=detected_dir)
+        self.status_left.configure(text=res_msg)
 
     def show_no_results(self, query: str):
-        self.set_detail_text(f"'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya üstteki '⚡ Cümle & Sentaks Çevirisi (BETA)' sekmesinden cümle çevirisini deneyebilirsiniz.")
+        msg = self.gt("no_results").format(query=query)
+        self.set_detail_text(msg)
 
     def on_row_selected(self, event):
         selected = self.tree.selection()
@@ -746,16 +1138,24 @@ class TranslatorApp(ctk.CTk):
             self.clipboard_clear()
             self.clipboard_append(target)
             old_status = self.status_left.cget("text")
-            self.status_left.configure(text=f"Kopyalandı: '{target}'")
+            self.status_left.configure(text=self.gt("copied_status").format(word=target))
             self.after(1500, lambda: self.status_left.configure(text=old_status))
 
     def destroy(self):
+        if hasattr(self, "debounce_timer") and self.debounce_timer:
+            try:
+                self.after_cancel(self.debounce_timer)
+            except Exception:
+                pass
+        if hasattr(self, "quick_service") and self.quick_service:
+            self.quick_service.stop()
         if hasattr(self, "db") and self.db:
             self.db.close()
         if hasattr(self, "syntax_translator") and self.syntax_translator:
             if hasattr(self.syntax_translator, "conn") and self.syntax_translator.conn:
                 self.syntax_translator.conn.close()
         super().destroy()
+
 
 def run_app():
     app = TranslatorApp()

@@ -13,8 +13,8 @@ data/*.zip
 data/*.tei
 data/*.tsv
 data/*.db
+data/*.json
 data/models/
-data/webster.json
 data/tdk_v12.sqlite3.db
 
 # Virtual environments
