@@ -209,10 +209,11 @@ class DictionaryDB:
         # Default fallback to English
         return "en"
 
-    def search(self, query: str, mode: str = "auto", limit: int = 100) -> Tuple[List[Dict[str, Any]], float, str]:
+    def search(self, query: str, mode: str = "auto", limit: int = 100, show_slang_profanity: bool = True) -> Tuple[List[Dict[str, Any]], float, str]:
         """
         Search dictionary with sub-millisecond range/exact query, morphological root fallback,
         and official TDK / Webster definition fallback.
+        Supports filtering out slang and profanity ('Argo / Sokak Dili') when show_slang_profanity=False.
         Returns: (results_list, elapsed_ms, detected_direction)
         """
         query = query.strip()
@@ -232,20 +233,26 @@ class DictionaryDB:
         src_col = "en_lower" if is_en else "tr_lower"
         upper_bound = q_lower + "\uffff"
 
+        slang_filter = "" if show_slang_profanity else "AND category NOT IN ('Argo / Sokak Dili', 'Slang', 'Argo')"
+
         # Query using B-Tree range & exact matching with prioritized sorting
         sql = f"""
         SELECT en, tr, type, category, {src_col}
         FROM bilingual
-        WHERE {src_col} >= ? AND {src_col} < ?
+        WHERE {src_col} >= ? AND {src_col} < ? {slang_filter}
         ORDER BY 
             CASE WHEN {src_col} = ? THEN 0 ELSE 1 END,
             CASE category 
+                WHEN 'Primary' THEN -1
                 WHEN 'Common Usage' THEN 0
                 WHEN 'Temel Çekim' THEN 1
                 WHEN 'İngilizce Düzensiz Fiil' THEN 2
                 WHEN 'İngilizce Derecelendirme' THEN 3
                 WHEN 'İngilizce Düzensiz Çoğul' THEN 4
                 WHEN 'TDK Atasözleri ve Deyimler' THEN 5
+                WHEN 'Idioms & Proverbs' THEN 5
+                WHEN 'Idioms' THEN 5
+                WHEN 'Proverb' THEN 5
                 WHEN 'Wiktionary' THEN 6
                 WHEN 'Wiktionary / Çekim' THEN 7
                 WHEN 'FreeDict' THEN 8
@@ -266,16 +273,20 @@ class DictionaryDB:
             alt_sql = f"""
             SELECT en, tr, type, category, {alt_src_col}
             FROM bilingual
-            WHERE {alt_src_col} >= ? AND {alt_src_col} < ?
+            WHERE {alt_src_col} >= ? AND {alt_src_col} < ? {slang_filter}
             ORDER BY 
                 CASE WHEN {alt_src_col} = ? THEN 0 ELSE 1 END,
                 CASE category 
+                    WHEN 'Primary' THEN -1
                     WHEN 'Common Usage' THEN 0
                     WHEN 'Temel Çekim' THEN 1
                     WHEN 'İngilizce Düzensiz Fiil' THEN 2
                     WHEN 'İngilizce Derecelendirme' THEN 3
                     WHEN 'İngilizce Düzensiz Çoğul' THEN 4
                     WHEN 'TDK Atasözleri ve Deyimler' THEN 5
+                    WHEN 'Idioms & Proverbs' THEN 5
+                    WHEN 'Idioms' THEN 5
+                    WHEN 'Proverb' THEN 5
                     WHEN 'Wiktionary' THEN 6
                     WHEN 'Wiktionary / Çekim' THEN 7
                     WHEN 'FreeDict' THEN 8
