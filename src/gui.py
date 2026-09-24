@@ -269,7 +269,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.lbl_sec_rc.pack(anchor="w", padx=16, pady=(12, 6))
 
-        # Feature 1: Selection Translate (Floating Button on Text Selection in Brave, Chrome, etc.)
+        # Feature 1: Selection Translate (Floating Button on Text Drag-Selection in Brave, Chrome, etc.)
         self.selection_switch = ctk.CTkSwitch(
             card_rc,
             text=self.gt("selection_translate_lbl"),
@@ -290,7 +290,30 @@ class SettingsWindow(ctk.CTkToplevel):
             wraplength=540,
             justify="left"
         )
-        self.lbl_selection_desc.pack(anchor="w", padx=16, pady=(0, 10))
+        self.lbl_selection_desc.pack(anchor="w", padx=16, pady=(0, 8))
+
+        # Feature 1b: Double-Click Translate (Floating Button on Word Double-Click)
+        self.double_click_switch = ctk.CTkSwitch(
+            card_rc,
+            text=self.gt("double_click_translate_lbl"),
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self.on_double_click_changed
+        )
+        if self.settings.get("double_click_translate", False):
+            self.double_click_switch.select()
+        else:
+            self.double_click_switch.deselect()
+        self.double_click_switch.pack(anchor="w", padx=16, pady=(4, 2))
+
+        self.lbl_double_click_desc = ctk.CTkLabel(
+            card_rc,
+            text=self.gt("double_click_translate_desc"),
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+            wraplength=540,
+            justify="left"
+        )
+        self.lbl_double_click_desc.pack(anchor="w", padx=16, pady=(0, 10))
 
         # Feature 2: Ctrl + Right Click Quick Translate Popup
         self.ctrl_rc_switch = ctk.CTkSwitch(
@@ -602,6 +625,10 @@ class SettingsWindow(ctk.CTkToplevel):
     def on_selection_changed(self):
         val = bool(self.selection_switch.get())
         self.settings.set("selection_translate", val)
+
+    def on_double_click_changed(self):
+        val = bool(self.double_click_switch.get())
+        self.settings.set("double_click_translate", val)
 
     def on_ctrl_rc_changed(self):
         val = bool(self.ctrl_rc_switch.get())

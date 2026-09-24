@@ -378,8 +378,9 @@ class GlobalQuickTranslateService:
                 ctrl_rc_enabled = self.settings.get("ctrl_right_click_translate", True)
                 rc_btn_enabled = self.settings.get("right_click_translate", True) or self.settings.get("windows_context_menu", True)
                 sel_enabled = self.settings.get("selection_translate", True)
+                dbl_enabled = self.settings.get("double_click_translate", False)
 
-                if not (ctrl_rc_enabled or rc_btn_enabled or sel_enabled):
+                if not (ctrl_rc_enabled or rc_btn_enabled or sel_enabled or dbl_enabled):
                     time.sleep(0.3)
                     continue
 
@@ -430,7 +431,8 @@ class GlobalQuickTranslateService:
                     self.last_lbutton_up_time = up_time
                     self.last_lbutton_up_pos = (cx, cy)
 
-                    if sel_enabled and (is_drag or is_double_click):
+                    should_trigger = (is_drag and sel_enabled) or (is_double_click and dbl_enabled)
+                    if should_trigger:
                         if now - self.last_trigger_time > 0.45:
                             time.sleep(0.04)  # brief wait for browser to paint selection
                             self._try_capture_and_show(cx, cy, immediate=False)

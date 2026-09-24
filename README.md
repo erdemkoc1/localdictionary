@@ -32,6 +32,7 @@ Hiçbir bulut servisine, harici API'ye veya internet bağlantısına ihtiyaç du
 
 ### 4. Windows Entegrasyonu ve Hızlı Çeviri
 * **Ctrl + Sağ Tık Hızlı Çeviri:** Herhangi bir programda (tarayıcı, PDF, Word vb.) seçili metin üzerinde `Ctrl + Sağ Tık` yapıldığında anında çeviri kartı açılır.
+* **Özelleştirilebilir Seçim & Çift Tık Çevirisi:** Metin fareyle sürüklendiğinde veya kelimeye çift tıklandığında beliren çeviri butonları ayarlardan isteğe bağlı olarak kolayca açılıp kapatılabilir.
 * **Sistem Tepsisi (System Tray):** Pencere simge durumuna alındığında arka planda sessizce hazır bekler.
 * **Açık / Koyu Tema & Dil Desteği:** Türkçe ve İngilizce arayüz, koyu (Dark) ve açık (Light) tema seçenekleri.
 
