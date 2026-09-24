@@ -175,14 +175,18 @@ class DictionaryDB:
 
         q_lower = turkish_lower(query)
 
-        # 2. Check exact hit in TR or EN bilingual table
-        self.cur.execute("SELECT 1 FROM bilingual WHERE tr_lower = ? LIMIT 1;", (q_lower,))
-        if self.cur.fetchone():
-            return "tr"
+        # 2. Check bilingual exact hit comparison
+        self.cur.execute("SELECT COUNT(*) FROM bilingual WHERE tr_lower = ?;", (q_lower,))
+        tr_exact = self.cur.fetchone()[0]
+        self.cur.execute("SELECT COUNT(*) FROM bilingual WHERE en_lower = ?;", (q_lower,))
+        en_exact = self.cur.fetchone()[0]
 
-        self.cur.execute("SELECT 1 FROM bilingual WHERE en_lower = ? LIMIT 1;", (q_lower,))
-        if self.cur.fetchone():
+        if en_exact > 0 and tr_exact == 0:
             return "en"
+        if tr_exact > 0 and en_exact == 0:
+            return "tr"
+        if en_exact > 0 and tr_exact > 0:
+            return "en" if en_exact >= tr_exact else "tr"
 
         # 3. Check official monolingual dictionaries (TDK vs Webster)
         self.cur.execute("SELECT 1 FROM tr_definitions WHERE word_lower = ? LIMIT 1;", (q_lower,))
@@ -242,22 +246,30 @@ class DictionaryDB:
         WHERE {src_col} >= ? AND {src_col} < ? {slang_filter}
         ORDER BY 
             CASE WHEN {src_col} = ? THEN 0 ELSE 1 END,
-            CASE category 
-                WHEN 'Primary' THEN -1
-                WHEN 'Common Usage' THEN 0
-                WHEN 'Temel Çekim' THEN 1
-                WHEN 'İngilizce Düzensiz Fiil' THEN 2
-                WHEN 'İngilizce Derecelendirme' THEN 3
-                WHEN 'İngilizce Düzensiz Çoğul' THEN 4
-                WHEN 'TDK Atasözleri ve Deyimler' THEN 5
-                WHEN 'Idioms & Proverbs' THEN 5
-                WHEN 'Idioms' THEN 5
-                WHEN 'Proverb' THEN 5
-                WHEN 'Wiktionary' THEN 6
-                WHEN 'Wiktionary / Çekim' THEN 7
-                WHEN 'FreeDict' THEN 8
-                WHEN 'General' THEN 9
-                ELSE 10
+            CASE 
+                WHEN category = 'Primary' THEN -3
+                WHEN category = 'Idioms & Proverbs' THEN -2
+                WHEN category = 'Common Usage' THEN -1
+                WHEN category = 'CEFR A1' THEN 0
+                WHEN category = 'CEFR A2' THEN 1
+                WHEN category = 'CEFR B1' THEN 2
+                WHEN category = 'CEFR B2' THEN 3
+                WHEN category = 'CEFR C1' THEN 4
+                WHEN category = 'CEFR C2' THEN 5
+                WHEN category LIKE 'CEFR%' THEN 5
+                WHEN category = 'Formal' THEN 6
+                WHEN category = 'Temel Çekim' THEN 7
+                WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
+                WHEN category = 'İngilizce Derecelendirme' THEN 9
+                WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
+                WHEN category = 'TDK Atasözleri ve Deyimler' THEN 11
+                WHEN category = 'Idioms' THEN 11
+                WHEN category = 'Proverb' THEN 11
+                WHEN category = 'Wiktionary' THEN 12
+                WHEN category = 'Wiktionary / Çekim' THEN 13
+                WHEN category = 'FreeDict' THEN 14
+                WHEN category = 'General' THEN 15
+                ELSE 16
             END,
             length({src_col}) ASC
         LIMIT ?;
@@ -276,22 +288,30 @@ class DictionaryDB:
             WHERE {alt_src_col} >= ? AND {alt_src_col} < ? {slang_filter}
             ORDER BY 
                 CASE WHEN {alt_src_col} = ? THEN 0 ELSE 1 END,
-                CASE category 
-                    WHEN 'Primary' THEN -1
-                    WHEN 'Common Usage' THEN 0
-                    WHEN 'Temel Çekim' THEN 1
-                    WHEN 'İngilizce Düzensiz Fiil' THEN 2
-                    WHEN 'İngilizce Derecelendirme' THEN 3
-                    WHEN 'İngilizce Düzensiz Çoğul' THEN 4
-                    WHEN 'TDK Atasözleri ve Deyimler' THEN 5
-                    WHEN 'Idioms & Proverbs' THEN 5
-                    WHEN 'Idioms' THEN 5
-                    WHEN 'Proverb' THEN 5
-                    WHEN 'Wiktionary' THEN 6
-                    WHEN 'Wiktionary / Çekim' THEN 7
-                    WHEN 'FreeDict' THEN 8
-                    WHEN 'General' THEN 9
-                    ELSE 10
+                CASE 
+                    WHEN category = 'Primary' THEN -3
+                    WHEN category = 'Idioms & Proverbs' THEN -2
+                    WHEN category = 'Common Usage' THEN -1
+                    WHEN category = 'CEFR A1' THEN 0
+                    WHEN category = 'CEFR A2' THEN 1
+                    WHEN category = 'CEFR B1' THEN 2
+                    WHEN category = 'CEFR B2' THEN 3
+                    WHEN category = 'CEFR C1' THEN 4
+                    WHEN category = 'CEFR C2' THEN 5
+                    WHEN category LIKE 'CEFR%' THEN 5
+                    WHEN category = 'Formal' THEN 6
+                    WHEN category = 'Temel Çekim' THEN 7
+                    WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
+                    WHEN category = 'İngilizce Derecelendirme' THEN 9
+                    WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
+                    WHEN category = 'TDK Atasözleri ve Deyimler' THEN 11
+                    WHEN category = 'Idioms' THEN 11
+                    WHEN category = 'Proverb' THEN 11
+                    WHEN category = 'Wiktionary' THEN 12
+                    WHEN category = 'Wiktionary / Çekim' THEN 13
+                    WHEN category = 'FreeDict' THEN 14
+                    WHEN category = 'General' THEN 15
+                    ELSE 16
                 END,
                 length({alt_src_col}) ASC
             LIMIT ?;
