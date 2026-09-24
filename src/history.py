@@ -49,26 +49,23 @@ class HistoryManager:
 
         conn = self._get_connection()
         cur = conn.cursor()
+        cur.execute("DELETE FROM search_history WHERE query = ?;", (q,))
         cur.execute("""
-        INSERT INTO search_history (query, direction, result_count, last_searched)
-        VALUES (?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
-        ON CONFLICT(query) DO UPDATE SET
-            direction = excluded.direction,
-            result_count = excluded.result_count,
-            last_searched = strftime('%Y-%m-%d %H:%M:%f', 'now');
+        INSERT INTO search_history (query, direction, result_count)
+        VALUES (?, ?, ?);
         """, (q, direction, result_count))
         conn.commit()
         conn.close()
 
     def get_recent(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get list of recent searches ordered by last_searched descending."""
+        """Get list of recent searches ordered by id descending."""
         conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("""
         SELECT query, direction, result_count, 
                datetime(last_searched, 'localtime') as search_time
         FROM search_history
-        ORDER BY last_searched DESC, id DESC
+        ORDER BY id DESC
         LIMIT ?;
         """, (limit,))
         rows = cur.fetchall()
