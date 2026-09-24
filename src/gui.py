@@ -1029,8 +1029,25 @@ class TranslatorApp(ctk.CTk):
         return self.settings.get_text(key)
 
     def show_fatal_error(self, msg: str):
-        lbl = ctk.CTkLabel(self, text=f"Hata: {msg}", text_color="red", font=("Arial", 16))
-        lbl.pack(expand=True, padx=20, pady=20)
+        card = ctk.CTkFrame(self, corner_radius=12, fg_color=("#F5F5F5", "#242424"))
+        card.pack(expand=True, fill="both", padx=40, pady=40)
+        
+        lbl_icon = ctk.CTkLabel(card, text="⚠️", font=("Segoe UI", 48))
+        lbl_icon.pack(pady=(40, 10))
+        
+        lbl_title = ctk.CTkLabel(card, text="Veritabanı Dosyası Bulunamadı (dictionary.db)", font=("Segoe UI", 20, "bold"))
+        lbl_title.pack(pady=(0, 15))
+        
+        help_text = (
+            f"Eksik dosya: {msg}\n\n"
+            "GitHub'ın 100MB tekil dosya boyutu sınırı nedeniyle 370MB+ sözlük veritabanı\n"
+            "doğrudan git reposunda tutulmamaktadır.\n\n"
+            "Nasıl Çözülür?\n"
+            "1. GitHub Releases sayfasından 'dictionary.db' dosyasını indirip 'data/' içine koyun, VEYA\n"
+            "2. Terminalde 'python scripts/expand_dictionary_radically.py' çalıştırarak yerel oluşturun."
+        )
+        lbl_desc = ctk.CTkLabel(card, text=help_text, font=("Segoe UI", 13), justify="left")
+        lbl_desc.pack(padx=30, pady=10)
 
     def setup_ui(self):
         # 1. Top Header Frame
