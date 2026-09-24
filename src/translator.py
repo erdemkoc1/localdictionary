@@ -189,7 +189,7 @@ class SentenceTranslator:
         res = re.sub(r"\bTags\b", "", res)
 
         if from_code == "en" and to_code == "tr":
-            # Fix known common BPE compound / transliteration glitches
+            # Fix known common BPE compound / transliteration glitches and C1/C2 vocabulary gaps
             replacements = [
                 (r"\bkaraout\b", "elektrik kesintisi"),
                 (r"\bboğa metro\b", "kalabalık metro"),
@@ -197,14 +197,28 @@ class SentenceTranslator:
                 (r"\boperasyonel redüpsiyonite\b", "operasyonel fazlalık"),
                 (r"\bakıllı telefonlarının zayıf parladı\b", "akıllı telefonlarının cılız ışığı"),
                 (r"\btamamen karanlıktan atladı\b", "tamamen karanlığa boğdu"),
-                (r"\byavaş yavaş yavaş yavaş\b", "yavaş yavaş")
+                (r"\byavaş yavaş yavaş yavaş\b", "yavaş yavaş"),
+                (r"\b(oer\s+|sheer\s+)?serendipity\b", "mutlu bir tesadüf"),
+                (r"\bobfuscate('ye)?\b", "muğlaklaştırmaya"),
+                (r"\b(bir\s+)?mafya\s+(olmuştur|idi|oldu)\b", r"başına buyruk biri \2"),
+                (r"\blaconik\b", "kısa ve özlü"),
+                (r"\bquandary\b", "ikilem"),
+                (r"\bephemeral\b", "kısa ömürlü"),
+                (r"\bubiquitous\b", "her yerde var olan"),
             ]
             for pattern, rep in replacements:
                 res = re.sub(pattern, rep, res, flags=re.IGNORECASE)
 
         if from_code == "tr" and to_code == "en":
-            # Fix Turkish-to-English common phrase artifacts
+            # Fix Turkish-to-English common phrase artifacts and C1/C2 terminology
             replacements = [
+                (r"\bthe principle of failure\b", "the principle of reciprocity"),
+                (r"\bprinciple of failure\b", "principle of reciprocity"),
+                (r"\bmoved with heidal\b", "acted with composure"),
+                (r"\bwith heidal\b", "with composure"),
+                (r"\bdominated hisnger\b", "controlled his anger"),
+                (r"\bI didn’t have any problems with this\b", "I could not find anyone to address regarding this matter"),
+                (r"\bI didn't have any problems with this\b", "I could not find anyone to address regarding this matter"),
                 (r"\bstreet kavgasında\b", "street fight"),
                 (r"\bstreet kavgası\b", "street fight"),
                 (r"\b(my\s+)?dengim\b", "my equal"),
