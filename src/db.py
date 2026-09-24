@@ -148,6 +148,91 @@ def get_english_candidates(word: str) -> List[str]:
 
     return list(dict.fromkeys(candidates))
 
+def init_starter_db(db_path: str):
+    """
+    Initializes a lightweight starter SQLite dictionary database with essential schemas,
+    indexes, and sample vocabulary if data/dictionary.db is not present (e.g. on fresh git clone or CI).
+    Allows running tests, development, and basic searches without needing a 370MB download upfront.
+    """
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bilingual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            en TEXT,
+            tr TEXT,
+            type TEXT,
+            category TEXT,
+            en_lower TEXT,
+            tr_lower TEXT
+        );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bi_en ON bilingual(en_lower);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bi_tr ON bilingual(tr_lower);")
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tr_definitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word TEXT,
+            word_lower TEXT,
+            meaning TEXT,
+            example TEXT,
+            author TEXT
+        );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_tdk_word ON tr_definitions(word_lower);")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS en_definitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word TEXT,
+            word_lower TEXT,
+            definition TEXT
+        );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_webster_word ON en_definitions(word_lower);")
+
+    starter_words = [
+        ("computer", "bilgisayar", "n", "Genel"),
+        ("achievement", "başarı", "n", "Genel"),
+        ("accomplishment", "başarı", "n", "Genel"),
+        ("success", "başarı", "n", "Genel"),
+        ("river", "ırmak", "n", "Coğrafya"),
+        ("river", "nehir", "n", "Coğrafya"),
+        ("water", "su", "n", "Genel"),
+        ("book", "kitap", "n", "Genel"),
+        ("school", "okul", "n", "Genel"),
+        ("go", "gitmek", "v", "Genel"),
+        ("come", "gelmek", "v", "Genel"),
+        ("see", "görmek", "v", "Genel"),
+        ("work", "çalışmak", "v", "Genel"),
+        ("live", "yaşamak", "v", "Genel"),
+        ("doctor", "doktor", "n", "Tıp"),
+        ("hospital", "hastane", "n", "Tıp"),
+        ("teacher", "öğretmen", "n", "Eğitim"),
+        ("student", "öğrenci", "n", "Eğitim"),
+        ("welcome", "hoş geldiniz", "expr", "Genel"),
+        ("hello", "merhaba", "expr", "Genel"),
+        ("courage", "cesaret", "n", "Genel"),
+        ("dilmaç", "tercüman", "n", "Genel")
+    ]
+    for en, tr, pos, cat in starter_words:
+        cur.execute(
+            "INSERT INTO bilingual (en, tr, type, category, en_lower, tr_lower) VALUES (?, ?, ?, ?, ?, ?);",
+            (en, tr, pos, cat, en.lower(), tr.lower())
+        )
+    cur.execute(
+        "INSERT INTO tr_definitions (word, word_lower, meaning, example, author) VALUES (?, ?, ?, ?, ?);",
+        ("dilmaç", "dilmaç", "çevirmen, tercüman.", "Eski metinlerde dilmaç olarak anılır.", "")
+    )
+    cur.execute(
+        "INSERT INTO en_definitions (word, word_lower, definition) VALUES (?, ?, ?);",
+        ("courage", "courage", "The state of heart; mind; spirit; resolution to face danger.")
+    )
+    conn.commit()
+    conn.close()
+
 class DictionaryDB:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
@@ -155,7 +240,7 @@ class DictionaryDB:
         
         self.db_path = db_path
         if not os.path.exists(self.db_path):
-            raise FileNotFoundError(f"Veritabanı dosyası bulunamadı: {self.db_path}")
+            init_starter_db(self.db_path)
 
         # Connect to SQLite
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
@@ -166,6 +251,14 @@ class DictionaryDB:
         self.cur.execute("PRAGMA cache_size = 50000;")
         self.cur.execute("PRAGMA mmap_size = 268435456;") # 256MB memory map
         self.cur.execute("PRAGMA synchronous = OFF;")
+
+    def is_starter_db(self) -> bool:
+        """Returns True if running on the initial starter dictionary."""
+        try:
+            self.cur.execute("SELECT COUNT(*) FROM bilingual;")
+            return self.cur.fetchone()[0] < 500
+        except Exception:
+            return False
 
     def detect_language(self, query: str) -> str:
         """Detect if input query is more likely Turkish or English."""
