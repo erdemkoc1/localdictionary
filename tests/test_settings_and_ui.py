@@ -62,6 +62,21 @@ class TestSettingsAndUI(unittest.TestCase):
         self.assertEqual(self.app.settings_btn.cget("text"), "⚙️ Ayarlar")
         self.assertEqual(self.app.tab_dict_name, "Sözlük")
 
+        # Test Selection and Double Click Options
+        sw.selection_switch.deselect()
+        sw.on_selection_changed()
+        self.assertFalse(self.app.settings.get("selection_translate"))
+        sw.selection_switch.select()
+        sw.on_selection_changed()
+        self.assertTrue(self.app.settings.get("selection_translate"))
+
+        sw.double_click_switch.select()
+        sw.on_double_click_changed()
+        self.assertTrue(self.app.settings.get("double_click_translate"))
+        sw.double_click_switch.deselect()
+        sw.on_double_click_changed()
+        self.assertFalse(self.app.settings.get("double_click_translate"))
+
         # Test Dual Right Click Options
         # Option 1: Ctrl + Right Click
         sw.ctrl_rc_switch.select()

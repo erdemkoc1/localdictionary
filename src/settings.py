@@ -11,6 +11,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "always_on_top": False,                       # Keep window on top
     "ctrl_right_click_translate": True,           # Option 1: Ctrl + Right Click Quick Translate Popup
     "selection_translate": True,                  # Option 2: Show floating button on text selection anywhere
+    "double_click_translate": False,              # Option 2b: Show floating button on double-click selection
     "right_click_translate": True,                # Option 3: Show floating button on right-click
     "windows_context_menu": True,                 # Windows Shell Context Menu & Right Click Button
     "run_on_startup": True,                       # Windows auto-start toggle
@@ -109,8 +110,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # Section 3: Right Click Translation Options
         "sec_right_click_options": "⚡ Sağ Tık & Metin Seçimi Çevirisi",
-        "selection_translate_lbl": "Metin Seçildiğinde Çeviri Butonu Göster (Brave, Chrome, Firefox vb.)",
-        "selection_translate_desc": "Tarayıcıda veya herhangi bir uygulamada metin seçildiğinde ya da kelimeye çift tıklandığında imlecin yanında [⚡ Çevir] butonu belirir.",
+        "selection_translate_lbl": "Metin Seçildiğinde (Sürükleme) Çeviri Butonu Göster",
+        "selection_translate_desc": "Tarayıcıda veya herhangi bir uygulamada fareyle metin seçilip sürüklendiğinde imlecin yanında [⚡ Çevir] butonu belirir.",
+        "double_click_translate_lbl": "Kelimeye Çift Tıklandığında Çeviri Butonu Göster",
+        "double_click_translate_desc": "Herhangi bir uygulamada bir kelimeye çift tıklandığında (sol çift tık) imlecin yanında [⚡ Çevir] butonu belirir. Rahatsız ediyorsa buradan kapatabilirsiniz.",
         "rc_translate_lbl": "Sağ Tık ile Çeviri Butonu Göster",
         "rc_translate_desc": "Seçili metne sağ tıklandığında imlecin yanında [⚡ LocalDictionary ile Çevir] butonu belirir.",
         "ctrl_rc_lbl": "Ctrl + Sağ Tık Hızlı Çeviri (Baloncuk)",
@@ -264,8 +267,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # Section 3: Right Click Translation Options
         "sec_right_click_options": "⚡ Right Click & Text Selection Translation",
-        "selection_translate_lbl": "Show Translate Button on Text Selection (Brave, Chrome, Firefox, etc.)",
-        "selection_translate_desc": "When text is selected or double-clicked in any browser or app, a [⚡ Translate] button appears near the cursor.",
+        "selection_translate_lbl": "Show Translate Button on Text Selection (Drag)",
+        "selection_translate_desc": "When text is selected by mouse dragging in any browser or app, a [⚡ Translate] button appears near the cursor.",
+        "double_click_translate_lbl": "Show Translate Button on Double-Click (Left Double Click)",
+        "double_click_translate_desc": "When double-clicking a word with left click in any application, shows a [⚡ Translate] button. Can be disabled if intrusive.",
         "rc_translate_lbl": "Show Translate Button on Right Click",
         "rc_translate_desc": "When right-clicking selected text in any app, a [⚡ Translate with LocalDictionary] button appears near the cursor.",
         "ctrl_rc_lbl": "Ctrl + Right Click Quick Translate (Floating Card)",
