@@ -946,7 +946,7 @@ class TranslatorApp(ctk.CTk):
         super().__init__()
 
         # Explicit Taskbar AppUserModelID
-        set_app_user_model_id("LocalDictionary.App.1.4")
+        set_app_user_model_id("LocalDictionary.App.1.41")
 
         # 1. Load Settings & Configuration
         self.settings = SettingsManager()
@@ -955,7 +955,9 @@ class TranslatorApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         # Window settings
-        self.title("LocalDictionary (TR ⇄ EN) - Portable")
+        is_tr = self.settings.get("language", "tr") == "tr"
+        badge_txt = "Açık Kaynak (BETA)" if is_tr else "Open Source (BETA)"
+        self.title(f"LocalDictionary v1.41 - {badge_txt}")
         self.geometry("1060x760")
         self.minsize(860, 600)
 
@@ -1971,7 +1973,10 @@ class TranslatorApp(ctk.CTk):
             self.tabview.rename(old_sent, new_sent)
             self.tab_sentence_name = new_sent
 
-        # 2. Header
+        # 2. Header & Window Title
+        is_tr = self.settings.get("language", "tr") == "tr"
+        badge_txt = "Açık Kaynak (BETA)" if is_tr else "Open Source (BETA)"
+        self.title(f"LocalDictionary v1.41 - {badge_txt}")
         self.title_label.configure(text=self.gt("app_title"))
         self.sub_label.configure(text=self.gt("app_subtitle"))
         self.settings_btn.configure(text=self.gt("settings_btn"))

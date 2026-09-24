@@ -4,7 +4,7 @@ import ctypes
 from typing import Tuple, Optional
 
 # Windows AppUserModelID for independent taskbar icon grouping
-def set_app_user_model_id(app_id: str = "LocalDictionary.App.1.4") -> bool:
+def set_app_user_model_id(app_id: str = "LocalDictionary.App.1.41") -> bool:
     """Sets explicit AppUserModelID so Windows taskbar groups and identifies the app separately."""
     try:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
@@ -19,10 +19,12 @@ def get_app_executable_path() -> str:
         return f'"{sys.executable}"'
     
     # Check if compiled desktop executable exists
+    user_home = os.path.expanduser("~")
     candidates = [
-        os.path.normpath(r"\OneDrive\Masaüstü\localdictionary\localdictionary.exe"),
-        os.path.normpath(r"\OneDrive\Desktop\localdictionary\localdictionary.exe"),
-        os.path.normpath(r"\Desktop\localdictionary\localdictionary.exe"),
+        os.path.join(user_home, "OneDrive", "Masaüstü", "localdictionary", "localdictionary.exe"),
+        os.path.join(user_home, "OneDrive", "Desktop", "localdictionary", "localdictionary.exe"),
+        os.path.join(user_home, "Desktop", "localdictionary", "localdictionary.exe"),
+        os.path.join(user_home, "Masaüstü", "localdictionary", "localdictionary.exe"),
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist", "localdictionary", "localdictionary.exe"))
     ]
     for c in candidates:

@@ -276,7 +276,7 @@ SENTENTIAL_ADVERBS = {
 
 COMMON_PERSON_NAMES = {
     "ayşe", "ali", "ahmet", "mehmet", "fatma", "emine", "mustafa", 
-    "can", "zeynep", "elif", "deniz", "burak", "selin", "erdem", "kemal",
+    "can", "zeynep", "elif", "deniz", "burak", "selin", "mert", "kemal",
     "john", "mary", "david", "sarah", "michael", "emma", "james", 
     "anna", "peter", "paul", "tom", "alex", "bob", "lisa", "george", "jesus"
 }

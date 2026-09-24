@@ -27,5 +27,9 @@ env/
 .idea/
 Thumbs.db
 Desktop.ini
+*.log
 error_log.txt
 scratch/
+.system_generated/
+*.sqlite
+*.sqlite3
