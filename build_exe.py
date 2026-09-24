@@ -15,7 +15,7 @@ def build_and_deploy():
     target_name = "localdictionary"
     dist_app_dir = os.path.join(dist_dir, target_name)
 
-    # 1. Run PyInstaller (Clean, lightweight, only customtkinter)
+    # 1. Run PyInstaller (CustomTkinter, Pystray, PIL, CTranslate2, ArgosTranslate)
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
@@ -23,6 +23,13 @@ def build_and_deploy():
         "--windowed",
         "--name", target_name,
         "--collect-all", "customtkinter",
+        "--collect-all", "pystray",
+        "--collect-all", "PIL",
+        "--collect-all", "ctranslate2",
+        "--collect-all", "argostranslate",
+        "--hidden-import", "src.user_data",
+        "--hidden-import", "src.clause_splitter",
+        "--hidden-import", "src.idiom_engine",
         "--clean",
         os.path.join(base_dir, "main.py")
     ]
@@ -34,7 +41,7 @@ def build_and_deploy():
         print("HATA: PyInstaller derleme başarısız oldu!")
         sys.exit(res.returncode)
 
-    # 2. Copy dictionary.db and settings
+    # 2. Copy dictionary.db, settings, and NMT models
     src_db = os.path.join(base_dir, "data", "dictionary.db")
     dest_data_dir = os.path.join(dist_app_dir, "data")
     os.makedirs(dest_data_dir, exist_ok=True)
@@ -47,6 +54,12 @@ def build_and_deploy():
     if os.path.exists(src_settings):
         shutil.copy2(src_settings, os.path.join(dest_data_dir, "settings.json"))
 
+    src_models = os.path.join(base_dir, "data", "models")
+    dest_models_dir = os.path.join(dest_data_dir, "models")
+    if os.path.exists(src_models):
+        print("\nNöral Yapay Zeka Çeviri Modelleri (CTranslate2 NMT) taşınabilir klasöre ekleniyor...")
+        shutil.copytree(src_models, dest_models_dir, dirs_exist_ok=True)
+
     # 3. Create README.txt
     readme_content = (
         "LOCALDICTIONARY (TR ⇄ EN) - PORTABLE SÜRÜM\n"
@@ -54,15 +67,22 @@ def build_and_deploy():
         "Bu uygulama tamamen yerel ve internetsiz çalışır.\n"
         "Kuruluma gerek yoktur.\n\n"
         "Çalıştırmak için 'localdictionary.exe' dosyasına çift tıklayın.\n\n"
-        "İçerik:\n"
+        "İçerik & Yenilikler:\n"
         "- 2.2+ Milyon Kayıtlı Çift Yönlü Sözlük & Çekim Motoru (TDK & Webster Dahil)\n"
+        "- Çevrimdışı Nöral Makine Çevirisi (CTranslate2 NMT - 100% Yerel AI)\n"
+        "- Çeviri Önbelleği (Translation Cache - Alt-milisaniye anında yanıt)\n"
+        "- İnsan Odaklı Öğrenme ('Doğrusunu Öğret' - Kullanıcı düzeltmelerini anında öğrenir)\n"
+        "- Özel Terim Sözlüğü (Custom Glossary - Tanımlı terim karşılıklarını zorunlu uygular)\n"
+        "- Cümle Ayrıştırma (Clause Splitting - Uzun ve bileşik cümleleri akıllı böler)\n"
+        "- Dinamik Güven Skoru & Rozetler (Yeşil %80+ / Sarı %55-79 / Kırmızı Uyarı)\n"
         "- Sağ Tık & Hızlı Seçim Çevirisi (Ctrl + Sağ Tık veya Pano İzleme)\n"
-        "- Ayarlar Sekmesi: Arayüz Dili (TR/EN), Koyu/Açık Tema, Sağ Tık Yapılandırması\n"
+        "- Ayarlar: Arayüz Dili (TR/EN), Koyu/Açık Tema, Sağ Tık Yapılandırması\n"
         "- Kalıcı Arama Geçmişi (Program kapansa dahi saklanır)\n"
-        "- Sentaks ve Kural Tabanlı Cümle Çevirisi (BETA - Anlık & Donanımsız)\n"
+        "- Argo & Küfür Filtreleme ve Doğal Sokak Dili Desteği\n"
     )
     with open(os.path.join(dist_app_dir, "README.txt"), "w", encoding="utf-8") as f:
         f.write(readme_content)
+
 
     # 4. Copy to Desktop locations
     desktop_targets = [
@@ -75,6 +95,13 @@ def build_and_deploy():
     
     deployed_paths = []
     seen = set()
+    # Terminate running process if any so files are not locked
+    try:
+        subprocess.run(["taskkill", "/F", "/IM", "localdictionary.exe"], capture_output=True)
+        import time; time.sleep(0.5)
+    except Exception:
+        pass
+
     for d in desktop_targets:
         norm_d = os.path.normpath(d)
         if os.path.exists(norm_d) and norm_d not in seen:

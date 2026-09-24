@@ -6,13 +6,20 @@ from src.utils import get_resource_path
 SETTINGS_FILE = get_resource_path(os.path.join("data", "settings.json"))
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
-    "theme": "dark",                   # "dark", "light", "system"
-    "language": "tr",                  # "tr", "en"
-    "right_click_translate": True,     # Global right click / quick translate
-    "right_click_trigger": "ctrl_right_click", # "ctrl_right_click", "clipboard"
-    "in_app_context_menu": True,       # Right click menu inside the application
-    "save_history": True,              # Store search queries in history.db
-    "default_direction": "auto"        # "auto", "en_tr", "tr_en"
+    "theme": "dark",                              # "dark", "light", "system"
+    "language": "tr",                             # "tr", "en"
+    "always_on_top": False,                       # Keep window on top
+    "ctrl_right_click_translate": True,           # Option 1: Ctrl + Right Click Quick Translate Popup
+    "selection_translate": True,                  # Option 2: Show floating button on text selection anywhere
+    "right_click_translate": True,                # Option 3: Show floating button on right-click
+    "windows_context_menu": True,                 # Windows Shell Context Menu & Right Click Button
+    "run_on_startup": True,                       # Windows auto-start toggle
+    "startup_mode": "minimized",                  # "normal" (foreground/open) or "minimized" (system tray / taskbar)
+    "minimize_to_tray": True,                     # Minimize to tray instead of quitting or keep in tray
+    "in_app_context_menu": True,                  # Right click context menu inside app entries/textboxes
+    "save_history": True,                         # Store search queries in history.db
+    "show_slang_profanity": True,                 # Show/filter slang, colloquial, and vulgar content
+    "default_direction": "auto"                   # "auto", "en_tr", "tr_en"
 }
 
 TRANSLATIONS: Dict[str, Dict[str, str]] = {
@@ -23,10 +30,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "history_btn": "🕒 Geçmiş",
         "settings_btn": "⚙️ Ayarlar",
         
-        # Tabs
-        "tab_dict": "🔍 Sözlük / Kelime Arama",
-        "tab_sentence": "⚡ Cümle & Sentaks Çevirisi (BETA)",
-        "tab_settings": "⚙️ Ayarlar",
+        # Tabs (Only 2 tabs on main window)
+        "tab_dict": "Sözlük",
+        "tab_sentence": "Cümle Çevirisi (BETA)",
 
         # Dictionary Tab
         "search_dir_lbl": "Arama Yönü:",
@@ -44,7 +50,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "dict_detail_title": "Sözlük Tanımı & Bilgi",
         "copy_translation_btn": "Çeviriyi Kopyala",
         "copied_status": "Kopyalandı: '{word}'",
-        "no_results": "'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya üstteki '⚡ Cümle & Sentaks Çevirisi' sekmesini deneyebilirsiniz.",
+        "no_results": "'{query}' kelimesi için doğrudan eşleşme bulunamadı.\n\nİpucu: Yazımı kontrol edebilir veya üstteki 'Cümle Çevirisi' sekmesini deneyebilirsiniz.",
+        "did_you_mean": "Bunu mu demek istediniz:",
         "results_found": "{count} sonuç bulundu ({ms:.1f} ms) — Yön: {direction}",
 
         # Sentence Translation Tab
@@ -53,28 +60,46 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "sent_dir_en_tr": "İngilizce ➔ Türkçe",
         "sent_dir_tr_en": "Türkçe ➔ İngilizce",
         "sent_input_lbl": "Çevrilecek Cümle / Metin:",
-        "translate_action_btn": "⚡ Çevir (Sentaks & Sözlük Motoru)",
+        "sent_did_you_mean": "Bunu mu demek istediniz:",
+        "translate_action_btn": "⚡ Çevir",
         "sent_clear_btn": "✕ Temizle",
         "sent_copy_btn": "📋 Çeviriyi Kopyala",
+        "sent_edit_btn": "✏️ Doğrusunu Öğret",
+        "btn_glossary": "📖 Terim Sözlüğü",
+        "conf_high": "🟢 Güven: %{score} (Yüksek)",
+        "conf_med": "🟡 Güven: %{score} (Orta)",
+        "conf_low": "⚠️ Düşük Güven: %{score} (Kontrol Edin)",
+        "conf_user": "✓ %100 (Kullanıcı Düzeltmesi)",
+        "glossary_title": "📖 Özel Terim Sözlüğü (Glossary)",
+        "glossary_sub": "Çeviride zorunlu olarak kullanılmasını istediğiniz özel terimleri tanımlayın.",
+        "glossary_src": "Kaynak Terim:",
+        "glossary_tgt": "Hedef Karşılık:",
+        "glossary_add": "+ Terim Ekle",
+        "glossary_del": "🗑️ Seçileni Sil",
+        "correction_title": "✏️ Çeviriyi Düzelt & Sisteme Öğret",
+        "correction_desc": "Bu cümlenin doğru çevirisini giriniz. Sistem bundan sonra bu çeviriyi hafızasında tutacaktır.",
+        "correction_saved": "✓ Doğru çeviri kaydedildi ve sisteme öğretildi!",
         "sent_loading_done": "✓ Çeviri Tamamlandı",
-        "sent_status_ready": "Cümle & Sentaks çevirisi tamamlandı.",
-        "breakdown_title": "Cümle Ögeleri & Sözlük Karşılıkları (Sentaks Analizi):",
+        "sent_status_ready": "Cümle çevirisi tamamlandı.",
+        "breakdown_title": "Cümle Ögeleri & Kelime Analizi:",
         "col_orig": "Kelime / İfade",
-        "col_role": "Sentaks Rolü",
+        "col_role": "Cümledeki Görevi",
         "col_pos": "Dilbilgisi",
         "col_trans": "Seçilen Çeviri",
         "col_alts": "Alternatifler",
 
-        # Settings Tab
-        "settings_header": "UYGULAMA AYARLARI",
-        "settings_desc": "Görünüm, arayüz dili, sağ tık çevirisi ve sistem tercihlerinizi buradan yapılandırabilirsiniz.",
+        # Settings Window
+        "settings_window_title": "⚙️ LocalDictionary Ayarları",
+        "settings_window_sub": "Görünüm, kısayollar, Windows entegrasyonu ve sistem tercihleri",
         
         # Section 1: Appearance
-        "sec_appearance": "🎨 Görünüm ve Tema",
+        "sec_appearance": "🎨 Görünüm ve Pencere",
         "theme_lbl": "Arayüz Teması:",
         "theme_dark": "🌙 Koyu (Dark)",
         "theme_light": "☀️ Açık (Light)",
         "theme_system": "💻 Sistem",
+        "always_on_top_lbl": "Pencereyi Her Zaman Üstte Tut (Always on Top)",
+        "always_on_top_desc": "Uygulama penceresi diğer pencerelerin üzerinde sabit kalır.",
 
         # Section 2: Language
         "sec_language": "🌐 Uygulama ve Arayüz Dili",
@@ -82,33 +107,69 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "lang_tr": "🇹🇷 Türkçe",
         "lang_en": "🇬🇧 English",
 
-        # Section 3: Right Click Translate
-        "sec_right_click": "⚡ Sağ Tık & Hızlı Çeviri (Pop-up)",
-        "rc_enable_lbl": "Hızlı Çeviri Baloncuğunu Etkinleştir",
-        "rc_enable_desc": "Herhangi bir Windows uygulamasında metin seçilip tetiklendiğinde imlecin yanında anlık çeviri kutusu gösterir.",
-        "rc_trigger_lbl": "Çeviri Tetikleme Yöntemi:",
-        "trigger_ctrl_rc": "Ctrl + Sağ Tık (Önerilen)",
-        "trigger_clipboard": "Pano Kopyalama (Ctrl+C)",
+        # Section 3: Right Click Translation Options
+        "sec_right_click_options": "⚡ Sağ Tık & Metin Seçimi Çevirisi",
+        "selection_translate_lbl": "Metin Seçildiğinde Çeviri Butonu Göster (Brave, Chrome, Firefox vb.)",
+        "selection_translate_desc": "Tarayıcıda veya herhangi bir uygulamada metin seçildiğinde ya da kelimeye çift tıklandığında imlecin yanında [⚡ Çevir] butonu belirir.",
+        "rc_translate_lbl": "Sağ Tık ile Çeviri Butonu Göster",
+        "rc_translate_desc": "Seçili metne sağ tıklandığında imlecin yanında [⚡ LocalDictionary ile Çevir] butonu belirir.",
+        "ctrl_rc_lbl": "Ctrl + Sağ Tık Hızlı Çeviri (Baloncuk)",
+        "ctrl_rc_desc": "Herhangi bir programda (tarayıcı, Word, PDF vb.) metin seçilip Ctrl + Sağ Tık yapıldığında doğrudan hızlı çeviri kartını açar.",
+        "win_ctx_lbl": "Windows Gezgini Sağ Tık Menüsü",
+        "win_ctx_desc": "Windows Gezgini'nde dosya, klasör ve masaüstü sağ tık menüsüne 'LocalDictionary ile Çevir' seçeneğini ekler.",
+        "win_ctx_active_notice": "✓ Arka planda ve sistem tepsisinde açık tutuluyor. Program kapalı olsa bile sağ tık çevirisi hazırdır.",
         "rc_inapp_lbl": "Uygulama İçi Sağ Tık Menüsü",
-        "rc_inapp_desc": "Sözlük içindeki tüm alanlarda sağ tık ile arama ve kopyalama menüsü gösterir.",
+        "rc_inapp_desc": "Sözlük içindeki tüm alanlarda sağ tık ile kopyalama ve arama menüsü gösterir.",
 
-        # Section 4: History & Storage
+        # Section 4: Startup Options
+        "sec_startup": "🚀 Windows Başlangıç Tercihleri",
+        "startup_enable_lbl": "Windows Başlangıcında Otomatik Başlat",
+        "startup_enable_desc": "Bilgisayar her açıldığında LocalDictionary arka planda otomatik olarak hazır başlar.",
+        "startup_mode_lbl": "Açılış Durumu (Pencere Görünümü):",
+        "startup_mode_normal": "🖥️ Normal Açık (Üstte/Önde)",
+        "startup_mode_minimized": "📥 Altta Açık (Simge Durumunda / Tepside)",
+        "startup_mode_desc": "Bilgisayar açıldığında uygulamanın ekranda açık mı yoksa görev çubuğunda/tepside hazır mı başlayacağını belirler.",
+
+        # Section 5: Taskbar & System Tray
+        "sec_tray": "📌 Görev Çubuğu ve Bildirim Alanı (Tray)",
+        "tray_desc": "LocalDictionary açık olduğu sürece Windows görev çubuğunda ve sağ alttaki sistem tepsisinde açık olduğunu belirtir.",
+        "tray_minimize_lbl": "Kapatıldığında / Simge Durumuna Alındığında Arka Planda Açık Tut",
+        "tray_minimize_desc": "Pencere kapatılsa bile sistem tepsisinde açık kalır ve Ctrl+Sağ Tık çevirisini anında yapmaya devam eder.",
+        "tray_open": "LocalDictionary'i Aç / Göster",
+        "tray_settings": "⚙️ Ayarlar",
+        "tray_exit": "Çıkış",
+        "tray_tooltip": "LocalDictionary (100% Çevrimdışı - Açık)",
+
+        # Section 6: History & Storage
         "sec_history": "🕒 Geçmiş & Veri Depolama",
         "hist_save_lbl": "Arama Geçmişini Kaydet",
         "hist_save_desc": "Aramaları yerel veritabanında kalıcı olarak saklar.",
         "hist_clear_btn": "🗑️ Geçmişi Temizle",
         "hist_cleared_msg": "Arama geçmişi başarıyla temizlendi.",
+        "hist_clear_confirm_title": "Geçmişi Temizle",
+        "hist_clear_confirm_msg": "Tüm arama geçmişiniz kalıcı olarak silinecek. Onaylıyor musunuz?",
+        "col_time": "Tarih / Saat",
+        "btn_delete": "Sil",
+        "btn_save": "💾 Kaydet & Sisteme Öğret",
+        "btn_close": "Tamam / Kapat",
 
-        # Section 5: About
-        "sec_about": "ℹ️ Hakkında ve Sistem Bilgisi",
-        "about_ver": "Sürüm: LocalDictionary v1.4 Taşınabilir",
+        # Section 6b: Content & Slang Preferences
+        "sec_content": "🛡️ İçerik & Sokak Dili Tercihleri",
+        "slang_profanity_lbl": "Argo ve Kaba İfadeleri Dahil Et (Slang & Profanity)",
+        "slang_profanity_desc": "Sözlük aramalarında ve cümle çevirisinde sokak dili, argo ve küfürlü ifadeleri gösterir. Kapatıldığında bu ifadeler sansürlenir / temizlenir.",
+
+        # Section 7: About
+        "sec_about": "ℹ️ Sistem ve Veritabanı Bilgisi",
+        "about_ver": "Sürüm: LocalDictionary v1.4 Taşınabilir (Portable)",
         "about_db": "Veritabanı: 2.26+ Milyon Kayıt (Bilingual, Wiktionary, FreeDict, TDK, Webster)",
         "about_mode": "Çalışma Modu: 100% Çevrimdışı (İnternetsiz ve Yerel)",
         "about_license": "Lisans: Açık Kaynak ve Ücretsiz",
+        "about_status_active": "● Durum: Arka planda aktif ve dinliyor",
 
         # Status Bar
         "status_ready": "Hazır",
-        "status_engine_badge": "● 2.2M+ Sözlük & Sentaks Motoru (100% Çevrimdışı)",
+        "status_translating": "Çevriliyor...",
+        "status_engine_badge": "● 2.2M+ Sözlük & Yerel AI Motoru (100% Çevrimdışı)",
 
         # Context Menu
         "ctx_search_dict": "🔍 Seçileni Sözlükte Ara",
@@ -124,10 +185,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "history_btn": "🕒 History",
         "settings_btn": "⚙️ Settings",
 
-        # Tabs
-        "tab_dict": "🔍 Dictionary / Word Search",
-        "tab_sentence": "⚡ Sentence & Syntax Translation (BETA)",
-        "tab_settings": "⚙️ Settings",
+        # Tabs (Only 2 tabs on main window)
+        "tab_dict": "Dictionary",
+        "tab_sentence": "Sentence Translation (BETA)",
 
         # Dictionary Tab
         "search_dir_lbl": "Direction:",
@@ -145,7 +205,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "dict_detail_title": "Dictionary Definition & Notes",
         "copy_translation_btn": "Copy Translation",
         "copied_status": "Copied: '{word}'",
-        "no_results": "No direct matches found for '{query}'.\n\nTip: Check spelling or try the '⚡ Sentence & Syntax Translation' tab above.",
+        "no_results": "No direct matches found for '{query}'.\n\nTip: Check spelling or try the 'Sentence Translation' tab above.",
+        "did_you_mean": "Did you mean:",
         "results_found": "{count} results found ({ms:.1f} ms) — Dir: {direction}",
 
         # Sentence Translation Tab
@@ -154,28 +215,46 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "sent_dir_en_tr": "English ➔ Turkish",
         "sent_dir_tr_en": "Turkish ➔ English",
         "sent_input_lbl": "Sentence / Text to Translate:",
-        "translate_action_btn": "⚡ Translate (Syntax & Dictionary Engine)",
+        "sent_did_you_mean": "Did you mean:",
+        "translate_action_btn": "⚡ Translate",
         "sent_clear_btn": "✕ Clear",
         "sent_copy_btn": "📋 Copy Translation",
+        "sent_edit_btn": "✏️ Teach Correction",
+        "btn_glossary": "📖 Glossary",
+        "conf_high": "🟢 Confidence: {score}% (High)",
+        "conf_med": "🟡 Confidence: {score}% (Medium)",
+        "conf_low": "⚠️ Low Confidence: {score}% (Review Advised)",
+        "conf_user": "✓ 100% (User Correction)",
+        "glossary_title": "📖 Custom Glossary Management",
+        "glossary_sub": "Define custom term pairs to be enforced during translation.",
+        "glossary_src": "Source Term:",
+        "glossary_tgt": "Target Translation:",
+        "glossary_add": "+ Add Term",
+        "glossary_del": "🗑️ Delete Selected",
+        "correction_title": "✏️ Correct & Teach Translation",
+        "correction_desc": "Enter the accurate translation for this text. The system will prioritize it in future queries.",
+        "correction_saved": "✓ Correction saved and learned by system!",
         "sent_loading_done": "✓ Translation Completed",
-        "sent_status_ready": "Sentence & Syntax translation completed.",
-        "breakdown_title": "Sentence Elements & Dictionary Matches (Syntax Analysis):",
+        "sent_status_ready": "Sentence translation completed.",
+        "breakdown_title": "Sentence Components & Word Analysis:",
         "col_orig": "Word / Phrase",
-        "col_role": "Syntax Role",
-        "col_pos": "Grammar (POS)",
+        "col_role": "Sentence Role",
+        "col_pos": "Grammar / POS",
         "col_trans": "Selected Translation",
         "col_alts": "Alternatives",
 
-        # Settings Tab
-        "settings_header": "APPLICATION SETTINGS",
-        "settings_desc": "Configure appearance, interface language, right-click translate, and system preferences.",
+        # Settings Window
+        "settings_window_title": "⚙️ LocalDictionary Settings",
+        "settings_window_sub": "Appearance, shortcuts, Windows integration and system preferences",
 
         # Section 1: Appearance
-        "sec_appearance": "🎨 Appearance & Theme",
+        "sec_appearance": "🎨 Appearance & Window",
         "theme_lbl": "Theme Mode:",
         "theme_dark": "🌙 Dark",
         "theme_light": "☀️ Light",
         "theme_system": "💻 System",
+        "always_on_top_lbl": "Keep Window Always on Top",
+        "always_on_top_desc": "Keeps application floating above other open windows.",
 
         # Section 2: Language
         "sec_language": "🌐 Language & Interface",
@@ -183,33 +262,69 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "lang_tr": "🇹🇷 Türkçe",
         "lang_en": "🇬🇧 English",
 
-        # Section 3: Right Click Translate
-        "sec_right_click": "⚡ Right-Click & Quick Translation (Pop-up)",
-        "rc_enable_lbl": "Enable Quick Translation Popup",
-        "rc_enable_desc": "Displays an instant floating translation box when selecting text in any Windows application.",
-        "rc_trigger_lbl": "Trigger Method:",
-        "trigger_ctrl_rc": "Ctrl + Right Click (Recommended)",
-        "trigger_clipboard": "Clipboard Copy (Ctrl+C)",
+        # Section 3: Right Click Translation Options
+        "sec_right_click_options": "⚡ Right Click & Text Selection Translation",
+        "selection_translate_lbl": "Show Translate Button on Text Selection (Brave, Chrome, Firefox, etc.)",
+        "selection_translate_desc": "When text is selected or double-clicked in any browser or app, a [⚡ Translate] button appears near the cursor.",
+        "rc_translate_lbl": "Show Translate Button on Right Click",
+        "rc_translate_desc": "When right-clicking selected text in any app, a [⚡ Translate with LocalDictionary] button appears near the cursor.",
+        "ctrl_rc_lbl": "Ctrl + Right Click Quick Translate (Floating Card)",
+        "ctrl_rc_desc": "Displays an instant floating translation card next to the cursor when you select text and press Ctrl + Right Click in any application.",
+        "win_ctx_lbl": "Windows Explorer Context Menu",
+        "win_ctx_desc": "Adds 'Translate with LocalDictionary' to the Windows Explorer file, folder, and desktop right-click menu.",
+        "win_ctx_active_notice": "✓ Kept active in background and system tray. Right-click translation is available even when window is closed.",
         "rc_inapp_lbl": "In-App Right-Click Context Menu",
         "rc_inapp_desc": "Shows context menu with search and copy inside the application fields.",
 
-        # Section 4: History & Storage
+        # Section 4: Startup Options
+        "sec_startup": "🚀 Windows Startup Preferences",
+        "startup_enable_lbl": "Start Automatically on Windows Boot",
+        "startup_enable_desc": "Automatically launches LocalDictionary in the background when Windows boots.",
+        "startup_mode_lbl": "Startup Launch State:",
+        "startup_mode_normal": "🖥️ Open Normally (Foreground)",
+        "startup_mode_minimized": "📥 Start Minimized (System Tray / Taskbar)",
+        "startup_mode_desc": "Controls whether the app window opens in front or starts minimized in the tray ready for shortcuts.",
+
+        # Section 5: Taskbar & System Tray
+        "sec_tray": "📌 Taskbar & System Tray",
+        "tray_desc": "LocalDictionary displays in the Windows taskbar and system tray whenever active.",
+        "tray_minimize_lbl": "Keep Active in Background when Closed/Minimized",
+        "tray_minimize_desc": "Keeps the app running in the background for instant translations even if the window is closed.",
+        "tray_open": "Open / Show LocalDictionary",
+        "tray_settings": "⚙️ Settings",
+        "tray_exit": "Exit",
+        "tray_tooltip": "LocalDictionary (100% Offline - Active)",
+
+        # Section 6: History & Storage
         "sec_history": "🕒 History & Data Storage",
         "hist_save_lbl": "Save Search History",
         "hist_save_desc": "Persists search queries locally in SQLite history database.",
         "hist_clear_btn": "🗑️ Clear History",
         "hist_cleared_msg": "Search history cleared successfully.",
+        "hist_clear_confirm_title": "Clear History",
+        "hist_clear_confirm_msg": "Are you sure you want to permanently clear your search history?",
+        "col_time": "Date / Time",
+        "btn_delete": "Delete",
+        "btn_save": "💾 Save & Teach",
+        "btn_close": "Close",
 
-        # Section 5: About
-        "sec_about": "ℹ️ About & System Information",
+        # Section 6b: Content & Slang Preferences
+        "sec_content": "🛡️ Content & Slang Preferences",
+        "slang_profanity_lbl": "Include Slang & Profanity",
+        "slang_profanity_desc": "Shows colloquial slang, street expressions, and profanity in dictionary and sentence translations. When disabled, these expressions are censored / filtered.",
+
+        # Section 7: About
+        "sec_about": "ℹ️ System & Database Information",
         "about_ver": "Version: LocalDictionary v1.4 Portable",
         "about_db": "Database: 2.26+ Million Records (Bilingual, Wiktionary, FreeDict, TDK, Webster)",
         "about_mode": "Mode: 100% Offline (Local & Zero Setup)",
         "about_license": "License: Open Source & Free",
+        "about_status_active": "● Status: Local AI engine active and ready",
 
         # Status Bar
         "status_ready": "Ready",
-        "status_engine_badge": "● 2.2M+ Dictionary & Syntax Engine (100% Offline)",
+        "status_translating": "Translating...",
+        "status_engine_badge": "● 2.2M+ Dictionary & Local AI Engine (100% Offline)",
 
         # Context Menu
         "ctx_search_dict": "🔍 Search in Dictionary",
@@ -233,6 +348,9 @@ class SettingsManager:
                 with open(self.filepath, "r", encoding="utf-8") as f:
                     saved = json.load(f)
                     if isinstance(saved, dict):
+                        # Migrate old key right_click_translate if present
+                        if "right_click_translate" in saved and "ctrl_right_click_translate" not in saved:
+                            saved["ctrl_right_click_translate"] = saved["right_click_translate"]
                         self.settings.update(saved)
             except Exception as e:
                 print(f"Uyarı: Ayarlar dosyası okunamadı ({e}), varsayılanlar kullanılıyor.")

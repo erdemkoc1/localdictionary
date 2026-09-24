@@ -65,3 +65,24 @@ def get_resource_path(relative_path: str) -> str:
     # 2. If running from source code
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_dir, relative_path)
+
+def get_short_path(path: str) -> str:
+    """
+    On Windows, converts a path with non-ASCII or spaces into the 8.3 short path
+    (e.g., 'C:\\Users\\...\\Masaüstü' -> 'C:\\Users\\...\\MASAST~1').
+    Prevents C/C++ libraries (such as SentencePiece ANSI fopen) from failing.
+    Returns original path on non-Windows or if conversion fails/not needed.
+    """
+    if sys.platform != 'win32' or not os.path.exists(path):
+        return path
+    try:
+        import ctypes
+        buffer_size = 500
+        buffer = ctypes.create_unicode_buffer(buffer_size)
+        res = ctypes.windll.kernel32.GetShortPathNameW(path, buffer, buffer_size)
+        if 0 < res < buffer_size:
+            return buffer.value
+    except Exception:
+        pass
+    return path
+
