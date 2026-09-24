@@ -911,11 +911,29 @@ class SyntaxTranslator:
                 clean_list.append((c_tgt or r_tgt, r_type, r_cat))
             return clean_list
 
-        if preferred_pos:
-            self.cur.execute(f"""
-            SELECT {tgt_col}, type, category 
+        if is_en:
+            if preferred_pos:
+                self.cur.execute("""
+                SELECT tr, type, category 
+                FROM bilingual 
+                WHERE en_lower = ? AND type LIKE ?
+                ORDER BY 
+                    CASE 
+                        WHEN category = 'Common Usage' THEN 0 
+                        WHEN category = 'General' THEN 1 
+                        WHEN category = 'Wiktionary / Çekim' THEN 20
+                        ELSE 2 
+                    END 
+                LIMIT 5;
+                """, (w_lower, f"%{preferred_pos}%"))
+                rows = self.cur.fetchall()
+                if rows:
+                    return _clean_rows(rows)
+
+            self.cur.execute("""
+            SELECT tr, type, category 
             FROM bilingual 
-            WHERE {col} = ? AND type LIKE ?
+            WHERE en_lower = ? 
             ORDER BY 
                 CASE 
                     WHEN category = 'Common Usage' THEN 0 
@@ -924,25 +942,41 @@ class SyntaxTranslator:
                     ELSE 2 
                 END 
             LIMIT 5;
-            """, (w_lower, f"%{preferred_pos}%"))
-            rows = self.cur.fetchall()
-            if rows:
-                return _clean_rows(rows)
+            """, (w_lower,))
+            return _clean_rows(self.cur.fetchall())
+        else:
+            if preferred_pos:
+                self.cur.execute("""
+                SELECT en, type, category 
+                FROM bilingual 
+                WHERE tr_lower = ? AND type LIKE ?
+                ORDER BY 
+                    CASE 
+                        WHEN category = 'Common Usage' THEN 0 
+                        WHEN category = 'General' THEN 1 
+                        WHEN category = 'Wiktionary / Çekim' THEN 20
+                        ELSE 2 
+                    END 
+                LIMIT 5;
+                """, (w_lower, f"%{preferred_pos}%"))
+                rows = self.cur.fetchall()
+                if rows:
+                    return _clean_rows(rows)
 
-        self.cur.execute(f"""
-        SELECT {tgt_col}, type, category 
-        FROM bilingual 
-        WHERE {col} = ? 
-        ORDER BY 
-            CASE 
-                WHEN category = 'Common Usage' THEN 0 
-                WHEN category = 'General' THEN 1 
-                WHEN category = 'Wiktionary / Çekim' THEN 20
-                ELSE 2 
-            END 
-        LIMIT 5;
-        """, (w_lower,))
-        return _clean_rows(self.cur.fetchall())
+            self.cur.execute("""
+            SELECT en, type, category 
+            FROM bilingual 
+            WHERE tr_lower = ? 
+            ORDER BY 
+                CASE 
+                    WHEN category = 'Common Usage' THEN 0 
+                    WHEN category = 'General' THEN 1 
+                    WHEN category = 'Wiktionary / Çekim' THEN 20
+                    ELSE 2 
+                END 
+            LIMIT 5;
+            """, (w_lower,))
+            return _clean_rows(self.cur.fetchall())
 
     def _conjugate_turkish_verb(
         self, 
