@@ -26,7 +26,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "tr": {
         # Header & Window
         "app_title": "LOCALDICTIONARY",
-        "app_subtitle": "v1.4 (100% Çevrimdışı - Taşınabilir)",
+        "app_subtitle": "v1.41 (Açık Kaynak / 100% Çevrimdışı - BETA)",
         "history_btn": "🕒 Geçmiş",
         "settings_btn": "⚙️ Ayarlar",
         
@@ -160,16 +160,16 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # Section 7: About
         "sec_about": "ℹ️ Sistem ve Veritabanı Bilgisi",
-        "about_ver": "Sürüm: LocalDictionary v1.4 Taşınabilir (Portable)",
+        "about_ver": "Sürüm: LocalDictionary v1.41 (Açık Kaynak / Open Source - BETA)",
         "about_db": "Veritabanı: 2.26+ Milyon Kayıt (Bilingual, Wiktionary, FreeDict, TDK, Webster)",
         "about_mode": "Çalışma Modu: 100% Çevrimdışı (İnternetsiz ve Yerel)",
-        "about_license": "Lisans: Açık Kaynak ve Ücretsiz",
+        "about_license": "Lisans: Açık Kaynak (MIT / Apache 2.0 / GPL Uyumlu - Tamamen Ücretsiz)",
         "about_status_active": "● Durum: Arka planda aktif ve dinliyor",
 
         # Status Bar
         "status_ready": "Hazır",
         "status_translating": "Çevriliyor...",
-        "status_engine_badge": "● 2.2M+ Sözlük & Yerel AI Motoru (100% Çevrimdışı)",
+        "status_engine_badge": "● 2.2M+ Sözlük & Açık Kaynak Yerel AI (BETA - 100% Çevrimdışı)",
 
         # Context Menu
         "ctx_search_dict": "🔍 Seçileni Sözlükte Ara",
@@ -181,7 +181,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
         # Header & Window
         "app_title": "LOCALDICTIONARY",
-        "app_subtitle": "v1.4 (100% Offline - Portable)",
+        "app_subtitle": "v1.41 (Open Source / 100% Offline - BETA)",
         "history_btn": "🕒 History",
         "settings_btn": "⚙️ Settings",
 
@@ -315,16 +315,16 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # Section 7: About
         "sec_about": "ℹ️ System & Database Information",
-        "about_ver": "Version: LocalDictionary v1.4 Portable",
+        "about_ver": "Version: LocalDictionary v1.41 (Open Source - BETA)",
         "about_db": "Database: 2.26+ Million Records (Bilingual, Wiktionary, FreeDict, TDK, Webster)",
         "about_mode": "Mode: 100% Offline (Local & Zero Setup)",
-        "about_license": "License: Open Source & Free",
+        "about_license": "License: Open Source (MIT / Apache 2.0 / GPL Compatible - 100% Free)",
         "about_status_active": "● Status: Local AI engine active and ready",
 
         # Status Bar
         "status_ready": "Ready",
         "status_translating": "Translating...",
-        "status_engine_badge": "● 2.2M+ Dictionary & Local AI Engine (100% Offline)",
+        "status_engine_badge": "● 2.2M+ Dictionary & Open Source Local AI (BETA - 100% Offline)",
 
         # Context Menu
         "ctx_search_dict": "🔍 Search in Dictionary",

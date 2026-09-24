@@ -62,13 +62,15 @@ def build_and_deploy():
 
     # 3. Create README.txt
     readme_content = (
-        "LOCALDICTIONARY (TR ⇄ EN) - PORTABLE SÜRÜM\n"
-        "===========================================\n\n"
-        "Bu uygulama tamamen yerel ve internetsiz çalışır.\n"
-        "Kuruluma gerek yoktur.\n\n"
+        "LOCALDICTIONARY v1.41 (AÇIK KAYNAK / OPEN SOURCE - BETA)\n"
+        "========================================================\n\n"
+        "Bu uygulama tamamen yerel ve internetsiz çalışır (100% Offline, Privacy-First).\n"
+        "Kuruluma gerek yoktur, sıfır yapılandırma ile çalışır.\n\n"
         "Çalıştırmak için 'localdictionary.exe' dosyasına çift tıklayın.\n\n"
-        "İçerik & Yenilikler:\n"
-        "- 2.2+ Milyon Kayıtlı Çift Yönlü Sözlük & Çekim Motoru (TDK & Webster Dahil)\n"
+        "İçerik & Özellikler (v1.41 BETA):\n"
+        "- 1.68M+ Çift Yönlü Sözlük & 2.2M+ Toplam Kayıt (Wiktionary, TDK, Webster, AWL, GRE)\n"
+        "- CEFR A1-C2 Seviye Etiketleme & Öncelikli Anlam Sıralaması (Re-Ranking)\n"
+        "- Derin Çok Anlamlılık (Polysemy) ve Genişletilmiş Deyimler Motoru\n"
         "- Çevrimdışı Nöral Makine Çevirisi (CTranslate2 NMT - 100% Yerel AI)\n"
         "- Çeviri Önbelleği (Translation Cache - Alt-milisaniye anında yanıt)\n"
         "- İnsan Odaklı Öğrenme ('Doğrusunu Öğret' - Kullanıcı düzeltmelerini anında öğrenir)\n"
@@ -79,18 +81,19 @@ def build_and_deploy():
         "- Ayarlar: Arayüz Dili (TR/EN), Koyu/Açık Tema, Sağ Tık Yapılandırması\n"
         "- Kalıcı Arama Geçmişi (Program kapansa dahi saklanır)\n"
         "- Argo & Küfür Filtreleme ve Doğal Sokak Dili Desteği\n"
+        "- Lisans: Açık Kaynak (MIT / Apache 2.0 / GPL Uyumlu)\n"
     )
     with open(os.path.join(dist_app_dir, "README.txt"), "w", encoding="utf-8") as f:
         f.write(readme_content)
 
 
     # 4. Copy to Desktop locations
+    user_home = os.path.expanduser("~")
     desktop_targets = [
-        os.path.expanduser("~/OneDrive/Masaüstü"),
-        os.path.expanduser("~/OneDrive/Desktop"),
-        os.path.expanduser("~/Desktop"),
-        "/OneDrive/Masaüstü",
-        "/Desktop"
+        os.path.join(user_home, "OneDrive", "Masaüstü"),
+        os.path.join(user_home, "OneDrive", "Desktop"),
+        os.path.join(user_home, "Desktop"),
+        os.path.join(user_home, "Masaüstü")
     ]
     
     deployed_paths = []
