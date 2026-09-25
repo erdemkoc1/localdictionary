@@ -1,131 +1,191 @@
+"""Build a clean, self-contained LocalDictionary release directory.
+
+This script never deploys to the Desktop, terminates running applications, or
+copies mutable user data (settings/history/corrections/cache) into a release.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
 import os
-import sys
 import shutil
 import subprocess
+import sys
+import zipfile
+from pathlib import Path
 
-sys.stdout.reconfigure(encoding='utf-8')
+from src.version import APP_NAME, APP_VERSION
 
-def build_and_deploy():
-    print("=" * 65)
-    print("LOCALDICTIONARY - ULTRA STABLE PORTABLE EXE DERLEME")
-    print("=" * 65)
+BASE_DIR = Path(__file__).resolve().parent
+DIST_DIR = BASE_DIR / "dist"
+APP_DIR = DIST_DIR / "localdictionary"
+TARGET_NAME = "localdictionary"
+EXCLUDED_MODULES = [
+    "argostranslate", "torch", "torchvision", "torchaudio", "spacy", "thinc",
+    "stanza", "pytest", "IPython", "notebook", "torchvision", "tensorflow",
+]
 
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    dist_dir = os.path.join(base_dir, "dist")
-    target_name = "localdictionary"
-    dist_app_dir = os.path.join(dist_dir, target_name)
 
-    # 1. Run PyInstaller (CustomTkinter, Pystray, PIL, CTranslate2, ArgosTranslate)
-    cmd = [
-        sys.executable, "-m", "PyInstaller",
-        "--noconfirm",
-        "--onedir",
-        "--windowed",
-        "--name", target_name,
+def _run(command: list[str]) -> None:
+    print("Running:", subprocess.list2cmdline(command))
+    subprocess.run(command, cwd=BASE_DIR, check=True)
+
+
+def _validate_assets() -> None:
+    required = [
+        BASE_DIR / "data" / "dictionary.db",
+        BASE_DIR / "data" / "models" / "translate-tr_en-1_5" / "model",
+        BASE_DIR / "data" / "models" / "translate-en_tr-1_5" / "model",
+    ]
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise SystemExit("Missing release assets:\n- " + "\n- ".join(missing))
+
+
+def _copy_release_assets() -> None:
+    data_dir = APP_DIR / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(BASE_DIR / "data" / "dictionary.db", data_dir / "dictionary.db")
+
+    source_models = BASE_DIR / "data" / "models"
+    target_models = data_dir / "models"
+    shutil.copytree(
+        source_models,
+        target_models,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("stanza", "__pycache__", "*.pyc"),
+    )
+
+    # Mutable user files are intentionally NOT part of a release.
+    forbidden_names = {"settings.json", "history.db", "user_data.db", "error_log.txt"}
+    for path in APP_DIR.rglob("*"):
+        if path.is_file() and path.name in forbidden_names:
+            raise RuntimeError(f"Refusing to package mutable user file: {path}")
+
+    for filename in (
+        "LICENSE", "README.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "DATA_LICENSES.md"
+    ):
+        source = BASE_DIR / filename
+        if source.is_file():
+            shutil.copy2(source, APP_DIR / filename)
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_source_manifest() -> Path:
+    source_assets = [BASE_DIR / "data" / "dictionary.db"]
+    source_assets.extend(path for path in (BASE_DIR / "data" / "models").rglob("*") if path.is_file())
+    manifest = APP_DIR / "RELEASE_MANIFEST.json"
+    payload = {
+        "application": APP_NAME,
+        "version": APP_VERSION,
+        "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "network_policy": "runtime has no network client or remote model/package index",
+        "user_data_policy": "mutable data is excluded; runtime data belongs under LOCALAPPDATA",
+        "source_assets": [
+            {
+                "path": path.relative_to(BASE_DIR).as_posix(),
+                "bytes": path.stat().st_size,
+                "sha256": _sha256(path),
+            }
+            for path in sorted(source_assets)
+        ],
+    }
+    manifest.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return manifest
+
+
+def _write_checksums() -> Path:
+    manifest = APP_DIR / "SHA256SUMS.txt"
+    files = sorted(
+        (path for path in APP_DIR.rglob("*") if path.is_file() and path != manifest),
+        key=lambda path: path.relative_to(APP_DIR).as_posix().lower(),
+    )
+    with manifest.open("w", encoding="utf-8", newline="\n") as stream:
+        for path in files:
+            relative = path.relative_to(APP_DIR).as_posix()
+            stream.write(f"{_sha256(path)}  {relative}\n")
+    return manifest
+
+
+def _write_release_readme() -> None:
+    text = (
+        f"{APP_NAME} v{APP_VERSION} - OFFLINE BETA\n"
+        "===========================================\n\n"
+        "This build performs dictionary lookup and neural translation locally.\n"
+        "It contains no telemetry, cloud API client, update client, or network feature.\n\n"
+        "Run localdictionary.exe to start the application.\n"
+        "SHA256SUMS.txt contains integrity hashes for every packaged file.\n\n"
+        "This EXE is not code-signed. Verify its SHA-256 hash before running it.\n"
+    )
+    (APP_DIR / "RELEASE_README.txt").write_text(text, encoding="utf-8", newline="\n")
+
+
+def _make_zip() -> Path:
+    archive = DIST_DIR / f"LocalDictionary-v{APP_VERSION}-win64.zip"
+    archive.unlink(missing_ok=True)
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
+        for path in sorted(APP_DIR.rglob("*")):
+            if path.is_file():
+                bundle.write(path, Path(TARGET_NAME) / path.relative_to(APP_DIR))
+    return archive
+
+
+def build(make_zip: bool = True) -> tuple[Path, Path | None]:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    _validate_assets()
+
+    if APP_DIR.exists():
+        shutil.rmtree(APP_DIR)
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
+        "--windowed", "--noupx", "--name", TARGET_NAME,
         "--collect-all", "customtkinter",
         "--collect-all", "pystray",
         "--collect-all", "PIL",
         "--collect-all", "ctranslate2",
-        "--collect-all", "argostranslate",
+        "--collect-all", "sentencepiece",
+        "--hidden-import", "src.local_nmt",
         "--hidden-import", "src.user_data",
         "--hidden-import", "src.clause_splitter",
         "--hidden-import", "src.idiom_engine",
-        "--clean",
-        os.path.join(base_dir, "main.py")
     ]
+    for module in EXCLUDED_MODULES:
+        command.extend(("--exclude-module", module))
+    command.append(str(BASE_DIR / "main.py"))
+    _run(command)
 
-    print("PyInstaller çalıştırılıyor:")
-    print(" ".join(cmd))
-    res = subprocess.run(cmd, cwd=base_dir)
-    if res.returncode != 0:
-        print("HATA: PyInstaller derleme başarısız oldu!")
-        sys.exit(res.returncode)
-
-    # 2. Copy dictionary.db, settings, and NMT models
-    src_db = os.path.join(base_dir, "data", "dictionary.db")
-    dest_data_dir = os.path.join(dist_app_dir, "data")
-    os.makedirs(dest_data_dir, exist_ok=True)
-    
-    print("\n2.2M+ Sözlük veritabanı taşınabilir klasöre ekleniyor...")
-    shutil.copy2(src_db, os.path.join(dest_data_dir, "dictionary.db"))
-    shutil.copy2(src_db, os.path.join(dist_app_dir, "dictionary.db"))
-
-    src_settings = os.path.join(base_dir, "data", "settings.json")
-    if os.path.exists(src_settings):
-        shutil.copy2(src_settings, os.path.join(dest_data_dir, "settings.json"))
-
-    src_models = os.path.join(base_dir, "data", "models")
-    dest_models_dir = os.path.join(dest_data_dir, "models")
-    if os.path.exists(src_models):
-        print("\nNöral Yapay Zeka Çeviri Modelleri (CTranslate2 NMT) taşınabilir klasöre ekleniyor...")
-        shutil.copytree(src_models, dest_models_dir, dirs_exist_ok=True)
-
-    # 3. Create README.txt
-    readme_content = (
-        "LOCALDICTIONARY v1.41 (AÇIK KAYNAK / OPEN SOURCE - BETA)\n"
-        "========================================================\n\n"
-        "Bu uygulama tamamen yerel ve internetsiz çalışır (100% Offline, Privacy-First).\n"
-        "Kuruluma gerek yoktur, sıfır yapılandırma ile çalışır.\n\n"
-        "Çalıştırmak için 'localdictionary.exe' dosyasına çift tıklayın.\n\n"
-        "İçerik & Özellikler (v1.41 BETA):\n"
-        "- 1.68M+ Çift Yönlü Sözlük & 2.2M+ Toplam Kayıt (Wiktionary, TDK, Webster, AWL, GRE)\n"
-        "- CEFR A1-C2 Seviye Etiketleme & Öncelikli Anlam Sıralaması (Re-Ranking)\n"
-        "- Derin Çok Anlamlılık (Polysemy) ve Genişletilmiş Deyimler Motoru\n"
-        "- Çevrimdışı Nöral Makine Çevirisi (CTranslate2 NMT - 100% Yerel AI)\n"
-        "- Çeviri Önbelleği (Translation Cache - Alt-milisaniye anında yanıt)\n"
-        "- İnsan Odaklı Öğrenme ('Doğrusunu Öğret' - Kullanıcı düzeltmelerini anında öğrenir)\n"
-        "- Özel Terim Sözlüğü (Custom Glossary - Tanımlı terim karşılıklarını zorunlu uygular)\n"
-        "- Cümle Ayrıştırma (Clause Splitting - Uzun ve bileşik cümleleri akıllı böler)\n"
-        "- Dinamik Güven Skoru & Rozetler (Yeşil %80+ / Sarı %55-79 / Kırmızı Uyarı)\n"
-        "- Sağ Tık & Hızlı Seçim Çevirisi (Ctrl + Sağ Tık veya Pano İzleme)\n"
-        "- Ayarlar: Arayüz Dili (TR/EN), Koyu/Açık Tema, Sağ Tık Yapılandırması\n"
-        "- Kalıcı Arama Geçmişi (Program kapansa dahi saklanır)\n"
-        "- Argo & Küfür Filtreleme ve Doğal Sokak Dili Desteği\n"
-        "- Lisans: Açık Kaynak (MIT / Apache 2.0 / GPL Uyumlu)\n"
-    )
-    with open(os.path.join(dist_app_dir, "README.txt"), "w", encoding="utf-8") as f:
-        f.write(readme_content)
+    _copy_release_assets()
+    _write_release_readme()
+    _write_source_manifest()
+    manifest = _write_checksums()
+    archive = _make_zip() if make_zip else None
+    print(f"\nBuild complete: {APP_DIR}")
+    print(f"Integrity manifest: {manifest}")
+    if archive:
+        print(f"Release archive: {archive}")
+    return APP_DIR, archive
 
 
-    # 4. Copy to Desktop locations
-    user_home = os.path.expanduser("~")
-    desktop_targets = [
-        os.path.join(user_home, "OneDrive", "Masaüstü"),
-        os.path.join(user_home, "OneDrive", "Desktop"),
-        os.path.join(user_home, "Desktop"),
-        os.path.join(user_home, "Masaüstü")
-    ]
-    
-    deployed_paths = []
-    seen = set()
-    # Terminate running process if any so files are not locked
-    try:
-        subprocess.run(["taskkill", "/F", "/IM", "localdictionary.exe"], capture_output=True)
-        import time; time.sleep(0.5)
-    except Exception:
-        pass
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--no-zip", action="store_true", help="Skip creation of the release ZIP")
+    args = parser.parse_args()
+    build(make_zip=not args.no_zip)
+    return 0
 
-    for d in desktop_targets:
-        norm_d = os.path.normpath(d)
-        if os.path.exists(norm_d) and norm_d not in seen:
-            seen.add(norm_d)
-            dest_folder = os.path.join(norm_d, "localdictionary")
-            print(f"\nMasaüstüne kopyalanıyor: {dest_folder}")
-            if os.path.exists(dest_folder):
-                try:
-                    shutil.rmtree(dest_folder)
-                except Exception as e:
-                    print(f"Eski klasör temizlenirken uyarı: {e}")
-            shutil.copytree(dist_app_dir, dest_folder, dirs_exist_ok=True)
-            deployed_paths.append(dest_folder)
-
-    print("\n" + "=" * 65)
-    print("TAMAMLANDI!")
-    print(f"Uygulama Adı: localdictionary.exe")
-    print(f"Masaüstü Konumları:")
-    for dp in deployed_paths:
-        print(f"  -> {dp}\\localdictionary.exe")
-    print("=" * 65)
 
 if __name__ == "__main__":
-    build_and_deploy()
+    raise SystemExit(main())

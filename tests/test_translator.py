@@ -1,16 +1,25 @@
 import os
 import sys
 import unittest
+import tempfile
 
 sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.translator import SentenceTranslator
+from src.user_data import UserDataManager
 
 class TestSentenceTranslator(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.translator = SentenceTranslator()
+        cls.temp_dir = tempfile.TemporaryDirectory(prefix="localdictionary-translator-test-")
+        cls.user_data = UserDataManager(os.path.join(cls.temp_dir.name, "user_data.db"))
+        cls.translator = SentenceTranslator(user_data=cls.user_data)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.translator.user_data = None
+        cls.temp_dir.cleanup()
 
     def test_en_to_tr_translation(self):
         text = "Hello world, this is a test sentence."

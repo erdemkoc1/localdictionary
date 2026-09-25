@@ -1,6 +1,7 @@
-import os
 import re
 import sqlite3
+import threading
+from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 from src.utils import turkish_lower, get_resource_path
 from src.grammar_data import (
@@ -828,13 +829,25 @@ def attach_copula_suffix(predicate: str, tense: str = "present") -> str:
 # MAIN SYNTAX TRANSLATOR CLASS
 # ==============================================================================
 
+def _synchronized(method):
+    def wrapped(self, *args, **kwargs):
+        with self._db_lock:
+            return method(self, *args, **kwargs)
+    wrapped.__name__ = method.__name__
+    wrapped.__doc__ = method.__doc__
+    return wrapped
+
+
 class SyntaxTranslator:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
             db_path = get_resource_path("data/dictionary.db")
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._db_lock = threading.RLock()
+        db_uri = Path(db_path).resolve().as_uri() + "?mode=ro"
+        self.conn = sqlite3.connect(db_uri, uri=True, check_same_thread=False)
         self.cur = self.conn.cursor()
 
+    @_synchronized
     def detect_language(self, sentence: str) -> str:
         """
         Robust language detection based on vocabulary match count rather than single characters.
@@ -866,6 +879,7 @@ class SyntaxTranslator:
 
         return "tr_en" if tr_score > en_score else "en_tr"
 
+    @_synchronized
     def _lookup_word(self, word: str, preferred_pos: Optional[str] = None, is_en: bool = True) -> List[Tuple[str, str, str]]:
         """
         Looks up word in prioritized vocabulary first, then SQLite bilingual database.
@@ -1243,6 +1257,7 @@ class SyntaxTranslator:
 
         return (token_lower, "present")
 
+    @_synchronized
     def translate(self, sentence: str, direction: str = "auto", show_slang_profanity: bool = True) -> Dict[str, Any]:
         sentence = sentence.strip()
         if not sentence:

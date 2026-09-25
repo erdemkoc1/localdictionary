@@ -1,10 +1,14 @@
 import os
 import sqlite3
+import threading
 import time
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from src.utils import turkish_lower, get_resource_path
 
 TR_CHARS = set("çğıöşüÇĞİÖŞÜ")
+MAX_QUERY_CHARS = 512
+MAX_SEARCH_RESULTS = 500
 
 EN_IRREGULAR_LEMMAS = {
     "went": "go", "gone": "go", "goes": "go", "going": "go",
@@ -170,28 +174,12 @@ def init_starter_db(db_path: str):
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bi_en ON bilingual(en_lower);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bi_tr ON bilingual(tr_lower);")
-    
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS tr_definitions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            word TEXT,
-            word_lower TEXT,
-            meaning TEXT,
-            example TEXT,
-            author TEXT
+        CREATE TABLE IF NOT EXISTS db_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         );
     """)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_tdk_word ON tr_definitions(word_lower);")
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS en_definitions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            word TEXT,
-            word_lower TEXT,
-            definition TEXT
-        );
-    """)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_webster_word ON en_definitions(word_lower);")
 
     starter_words = [
         ("computer", "bilgisayar", "n", "Genel"),
@@ -222,16 +210,26 @@ def init_starter_db(db_path: str):
             "INSERT INTO bilingual (en, tr, type, category, en_lower, tr_lower) VALUES (?, ?, ?, ?, ?, ?);",
             (en, tr, pos, cat, en.lower(), tr.lower())
         )
-    cur.execute(
-        "INSERT INTO tr_definitions (word, word_lower, meaning, example, author) VALUES (?, ?, ?, ?, ?);",
-        ("dilmaç", "dilmaç", "çevirmen, tercüman.", "Eski metinlerde dilmaç olarak anılır.", "")
-    )
-    cur.execute(
-        "INSERT INTO en_definitions (word, word_lower, definition) VALUES (?, ?, ?);",
-        ("courage", "courage", "The state of heart; mind; spirit; resolution to face danger.")
+    cur.executemany(
+        "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?, ?);",
+        (
+            ("schema_version", "2"),
+            ("dataset_kind", "starter"),
+            ("restricted_source_data_removed", "1"),
+            ("license_manifest", "DATA_LICENSES.md"),
+        )
     )
     conn.commit()
     conn.close()
+
+def _synchronized(method):
+    def wrapped(self, *args, **kwargs):
+        with self._connection_lock:
+            return method(self, *args, **kwargs)
+    wrapped.__name__ = method.__name__
+    wrapped.__doc__ = method.__doc__
+    return wrapped
+
 
 class DictionaryDB:
     def __init__(self, db_path: Optional[str] = None):
@@ -239,11 +237,13 @@ class DictionaryDB:
             db_path = get_resource_path(os.path.join("data", "dictionary.db"))
         
         self.db_path = db_path
+        self._connection_lock = threading.RLock()
         if not os.path.exists(self.db_path):
             init_starter_db(self.db_path)
 
         # Connect to SQLite
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        db_uri = Path(self.db_path).resolve().as_uri() + "?mode=ro"
+        self.conn = sqlite3.connect(db_uri, uri=True, check_same_thread=False)
         self.cur = self.conn.cursor()
         
         # High-performance read-only pragmas
@@ -252,6 +252,7 @@ class DictionaryDB:
         self.cur.execute("PRAGMA mmap_size = 268435456;") # 256MB memory map
         self.cur.execute("PRAGMA synchronous = OFF;")
 
+    @_synchronized
     def is_starter_db(self) -> bool:
         """Returns True if running on the initial starter dictionary."""
         try:
@@ -260,6 +261,7 @@ class DictionaryDB:
         except Exception:
             return False
 
+    @_synchronized
     def detect_language(self, query: str) -> str:
         """Detect if input query is more likely Turkish or English."""
         # 1. Distinctive Turkish letters
@@ -281,16 +283,7 @@ class DictionaryDB:
         if en_exact > 0 and tr_exact > 0:
             return "en" if en_exact >= tr_exact else "tr"
 
-        # 3. Check official monolingual dictionaries (TDK vs Webster)
-        self.cur.execute("SELECT 1 FROM tr_definitions WHERE word_lower = ? LIMIT 1;", (q_lower,))
-        if self.cur.fetchone():
-            return "tr"
-
-        self.cur.execute("SELECT 1 FROM en_definitions WHERE word_lower = ? LIMIT 1;", (q_lower,))
-        if self.cur.fetchone():
-            return "en"
-
-        # 4. Check prefix hits comparison
+        # 3. Check prefix hits comparison
         upper = q_lower + "\uffff"
         self.cur.execute("SELECT COUNT(*) FROM (SELECT 1 FROM bilingual WHERE tr_lower >= ? AND tr_lower < ? LIMIT 6);", (q_lower, upper))
         tr_cnt = self.cur.fetchone()[0]
@@ -306,16 +299,19 @@ class DictionaryDB:
         # Default fallback to English
         return "en"
 
+    @_synchronized
     def search(self, query: str, mode: str = "auto", limit: int = 100, show_slang_profanity: bool = True) -> Tuple[List[Dict[str, Any]], float, str]:
         """
-        Search dictionary with sub-millisecond range/exact query, morphological root fallback,
-        and official TDK / Webster definition fallback.
+        Search dictionary with indexed range/exact query and morphological root fallback.
         Supports filtering out slang and profanity ('Argo / Sokak Dili') when show_slang_profanity=False.
         Returns: (results_list, elapsed_ms, detected_direction)
         """
         query = query.strip()
         if not query:
             return [], 0.0, ""
+        if len(query) > MAX_QUERY_CHARS or "\x00" in query:
+            return [], 0.0, ""
+        limit = max(1, min(int(limit), MAX_SEARCH_RESULTS))
 
         t_start = time.perf_counter()
         q_lower = turkish_lower(query)
@@ -355,7 +351,7 @@ class DictionaryDB:
                 WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
                 WHEN category = 'İngilizce Derecelendirme' THEN 9
                 WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
-                WHEN category = 'TDK Atasözleri ve Deyimler' THEN 11
+                WHEN category = 'Curated Idioms' THEN 11
                 WHEN category = 'Idioms' THEN 11
                 WHEN category = 'Proverb' THEN 11
                 WHEN category = 'Wiktionary' THEN 12
@@ -397,7 +393,7 @@ class DictionaryDB:
                     WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
                     WHEN category = 'İngilizce Derecelendirme' THEN 9
                     WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
-                    WHEN category = 'TDK Atasözleri ve Deyimler' THEN 11
+                    WHEN category = 'Curated Idioms' THEN 11
                     WHEN category = 'Idioms' THEN 11
                     WHEN category = 'Proverb' THEN 11
                     WHEN category = 'Wiktionary' THEN 12
@@ -466,60 +462,14 @@ class DictionaryDB:
                             })
                         break
 
-        # -------------------------------------------------------------
-        # MONOLINGUAL DEFINITION FALLBACK (TDK / Webster)
-        # -------------------------------------------------------------
-        if len(results) == 0:
-            # Check TDK
-            tdk_defs = self.get_tr_definitions(query)
-            if tdk_defs:
-                for d in tdk_defs[:5]:
-                    results.append({
-                        "source": query,
-                        "target": d["meaning"],
-                        "type": "TDK Tanım",
-                        "category": "TDK Güncel Sözlük",
-                        "direction": "TR (Tanım)"
-                    })
-            else:
-                # Check Webster
-                webster_def = self.get_en_definition(query)
-                if webster_def:
-                    results.append({
-                        "source": query,
-                        "target": webster_def,
-                        "type": "Webster Def",
-                        "category": "Webster's Dictionary",
-                        "direction": "EN (Definition)"
-                    })
-
         elapsed_ms = (time.perf_counter() - t_start) * 1000
         return results, elapsed_ms, "EN ➔ TR" if is_en else "TR ➔ EN"
 
-    def get_tr_definitions(self, word: str) -> List[Dict[str, Optional[str]]]:
-        """Fetch official TDK Turkish definitions, examples, and authors."""
-        w_lower = turkish_lower(word.strip())
-        self.cur.execute("""
-        SELECT meaning, example, author 
-        FROM tr_definitions 
-        WHERE word_lower = ? 
-        LIMIT 10;
-        """, (w_lower,))
-        rows = self.cur.fetchall()
-        return [{"meaning": r[0], "example": r[1], "author": r[2]} for r in rows]
+    @property
+    def connection_lock(self) -> threading.RLock:
+        return self._connection_lock
 
-    def get_en_definition(self, word: str) -> Optional[str]:
-        """Fetch Webster's English definition."""
-        w_lower = word.strip().lower()
-        self.cur.execute("""
-        SELECT definition 
-        FROM en_definitions 
-        WHERE word_lower = ? 
-        LIMIT 1;
-        """, (w_lower,))
-        row = self.cur.fetchone()
-        return row[0] if row else None
-
+    @_synchronized
     def close(self):
         if self.conn:
             self.conn.close()

@@ -4,12 +4,12 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.41.x  | :white_check_mark: |
+| 1.42.x  | :white_check_mark: |
 | < 1.40  | :x:                |
 
 ## Reporting a Vulnerability
 
-Security is a high priority for this project. Because **LocalDictionary** operates 100% offline and locally without external network calls or cloud dependencies, security risks typically concern local file handling and input processing.
+Security is a high priority for this project. The application runtime is designed to operate with zero network traffic. Security risks therefore typically concern local file handling, input processing, Windows integrations, and bundled executable integrity.
 
 If you discover a security vulnerability or privacy concern:
 1. Please **do not** open a public issue describing the vulnerability.

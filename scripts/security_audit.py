@@ -1,106 +1,101 @@
+"""Offline repository security checks used before a public release."""
+
+from __future__ import annotations
+
+import ast
 import os
 import re
-import sys
 import subprocess
+import sys
+from pathlib import Path
 
-sys.stdout.reconfigure(encoding='utf-8')
-
-base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-patterns = [
-    ("HARDCODED_USER_PATH", re.compile(r'C:[/\\]Users[/\\][a-zA-Z0-9_.-]+', re.IGNORECASE)),
-    ("API_KEY_OR_SECRET", re.compile(r'(api[_-]?key|secret[_-]?key|access[_-]?token|bearer[_-]?token)\s*[:=]\s*[\'"][^\'"]+[\'"]', re.IGNORECASE)),
-    ("PRIVATE_KEY", re.compile(r'-----BEGIN\s+.*PRIVATE\s+KEY-----', re.IGNORECASE)),
-    ("OPENAI_KEY", re.compile(r'sk-[a-zA-Z0-9]{20,}', re.IGNORECASE)),
-    ("PASSWORD", re.compile(r'password\s*[:=]\s*[\'"][^\'"]+[\'"]', re.IGNORECASE)),
+BASE_DIR = Path(__file__).resolve().parent.parent
+IGNORED_DIRS = {".git", "venv", ".venv", "build", "dist", "__pycache__", "scratch", ".vscode", ".idea"}
+SECRET_PATTERNS = [
+    ("PRIVATE_KEY", re.compile(r"-----BEGIN\s+.*PRIVATE\s+KEY-----", re.I)),
+    ("OPENAI_KEY", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    ("GITHUB_TOKEN", re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b")),
+    ("AWS_ACCESS_KEY", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("API_SECRET", re.compile(r"(?i)(api[_-]?key|secret[_-]?key|access[_-]?token|password)\s*[:=]\s*['\"][^'\"]{8,}['\"]")),
 ]
+PATH_PATTERN = re.compile(r"(?i)C:[\\/]Users[\\/][A-Za-z0-9_.-]+")
+NETWORK_MODULES = {"argostranslate", "requests", "urllib", "http", "ftplib", "smtplib", "telnetlib"}
 
-ignored_dirs = {'.git', 'venv', '.venv', 'build', 'dist', '__pycache__', 'scratch', '.vscode', '.idea'}
 
-findings = []
+def _source_files(root: Path):
+    for current, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if name not in IGNORED_DIRS]
+        for filename in files:
+            path = Path(current) / filename
+            if path.suffix.lower() in {".py", ".json", ".md", ".txt", ".yml", ".yaml", ".toml", ".ps1", ".bat", ".sh"}:
+                yield path
 
-# 1. Scan Working Directory Files
-for root, dirs, files in os.walk(base_dir):
-    dirs[:] = [d for d in dirs if d not in ignored_dirs]
-    for f in files:
-        if f.endswith(('.py', '.json', '.txt', '.md', '.yml', '.yaml', '.sh', '.bat', '.ps1')):
-            fpath = os.path.join(root, f)
-            relpath = os.path.relpath(fpath, base_dir)
-            if "security_audit.py" in relpath:
-                continue
+
+def _git_history() -> str:
+    result = subprocess.run(
+        ["git", "log", "--all", "-p", "--no-ext-diff"],
+        cwd=BASE_DIR, capture_output=True, text=True, encoding="utf-8", errors="ignore", check=False,
+    )
+    return result.stdout
+
+
+def audit() -> list[str]:
+    findings: list[str] = []
+    for path in _source_files(BASE_DIR):
+        relative = path.relative_to(BASE_DIR)
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for line_no, line in enumerate(text.splitlines(), 1):
+            for label, pattern in SECRET_PATTERNS:
+                if pattern.search(line):
+                    findings.append(f"{relative}:{line_no}: {label}")
+            if PATH_PATTERN.search(line):
+                findings.append(f"{relative}:{line_no}: HARDCODED_USER_PATH")
+        if path.suffix == ".py" and "src" in relative.parts:
             try:
-                with open(fpath, 'r', encoding='utf-8', errors='ignore') as fp:
-                    for line_no, line in enumerate(fp, 1):
-                        for label, regex in patterns:
-                            if regex.search(line):
-                                findings.append((label, relpath, line_no, line.strip()))
-            except Exception as e:
-                print(f"Error reading {relpath}: {e}")
-
-# 2. Scan Entire Git Commit History
-git_history_leaks = []
-try:
-    res = subprocess.run(["git", "log", "-p"], capture_output=True, text=True, encoding="utf-8", errors="ignore")
-    current_commit = "HEAD"
-    for line in res.stdout.splitlines():
-        if line.startswith("commit "):
-            current_commit = line.split()[1]
-        elif line.startswith("+") and not line.startswith("+++"):
-            for label, regex in patterns:
-                if label != "HARDCODED_USER_PATH": # Check secrets/keys in history
-                    if regex.search(line):
-                        git_history_leaks.append((label, current_commit[:8], line.strip()))
-except Exception as e:
-    print(f"Git history check warning: {e}")
-
-# 3. Check for SQL Injection Vulnerabilities (cursor.execute with f-strings or .format)
-sql_risks = []
-for root, dirs, files in os.walk(base_dir):
-    dirs[:] = [d for d in dirs if d not in ignored_dirs]
-    for f in files:
-        if f.endswith('.py'):
-            fpath = os.path.join(root, f)
-            relpath = os.path.relpath(fpath, base_dir)
-            if "security_audit.py" in relpath or "test" in relpath or "scripts" in relpath:
+                tree = ast.parse(text)
+            except SyntaxError as exc:
+                findings.append(f"{relative}:{exc.lineno}: SYNTAX_ERROR")
                 continue
-            with open(fpath, 'r', encoding='utf-8', errors='ignore') as fp:
-                for line_no, line in enumerate(fp, 1):
-                    if re.search(r'execute\s*\(\s*f[\'"]', line):
-                        # Flag if table/col is dynamic or if raw variable is injected into query
-                        sql_risks.append((relpath, line_no, line.strip()))
+            for node in ast.walk(tree):
+                names: list[str] = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name.split(".")[0] for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    names = [(node.module or "").split(".")[0]]
+                if NETWORK_MODULES.intersection(names):
+                    findings.append(f"{relative}:{getattr(node, 'lineno', 1)}: NETWORK_IMPORT")
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    if node.func.id in {"eval", "exec", "__import__"}:
+                        findings.append(f"{relative}:{node.lineno}: UNSAFE_CALL")
 
-# 4. Check for Unsafe Execution (eval, exec, pickle)
-unsafe_calls = []
-for root, dirs, files in os.walk(base_dir):
-    dirs[:] = [d for d in dirs if d not in ignored_dirs]
-    for f in files:
-        if f.endswith('.py'):
-            fpath = os.path.join(root, f)
-            relpath = os.path.relpath(fpath, base_dir)
-            if "security_audit.py" in relpath:
-                continue
-            with open(fpath, 'r', encoding='utf-8', errors='ignore') as fp:
-                for line_no, line in enumerate(fp, 1):
-                    if re.search(r'\b(eval|exec|pickle\.loads?|yaml\.unsafe_load)\s*\(', line):
-                        unsafe_calls.append((relpath, line_no, line.strip()))
+    history = _git_history()
+    for line_no, line in enumerate(history.splitlines(), 1):
+        if PATH_PATTERN.search(line) and line.startswith("+"):
+            findings.append(f"git-history:{line_no}: HARDCODED_USER_PATH")
+        for label, pattern in SECRET_PATTERNS:
+            if line.startswith("+") and pattern.search(line):
+                findings.append(f"git-history:{line_no}: {label}")
+    return findings
 
-print("=" * 75)
-print("PROFESSIONAL PRE-RELEASE SECURITY AUDIT")
-print("=" * 75)
-print(f"1. Working Tree Secret/Path Findings : {len(findings)}")
-for label, relpath, line_no, content in findings:
-    print(f"   [{label}] {relpath}:{line_no} -> {content[:80]}")
 
-print(f"\n2. Full Git History Secret Leaks    : {len(git_history_leaks)}")
-for label, commit, snippet in git_history_leaks:
-    print(f"   [{label}] commit {commit} -> {snippet[:80]}")
+def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    findings = audit()
+    print("=" * 72)
+    print("LOCALDICTIONARY SECURITY AUDIT")
+    print("=" * 72)
+    if findings:
+        for finding in findings:
+            print(f"[FINDING] {finding}")
+        print(f"\nFAIL: {len(findings)} finding(s)")
+        return 1
+    print("PASS: no secret, hardcoded-path, unsafe-call, or runtime-network findings")
+    return 0
 
-print(f"\n3. Potential Dynamic SQL Injections : {len(sql_risks)}")
-for relpath, line_no, snippet in sql_risks:
-    print(f"   [SQL_INSPECT] {relpath}:{line_no} -> {snippet[:80]}")
 
-print(f"\n4. Unsafe Function Calls (eval/exec): {len(unsafe_calls)}")
-for relpath, line_no, snippet in unsafe_calls:
-    print(f"   [UNSAFE_CALL] {relpath}:{line_no} -> {snippet[:80]}")
-
-print("=" * 75)
+if __name__ == "__main__":
+    raise SystemExit(main())

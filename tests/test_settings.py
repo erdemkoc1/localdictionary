@@ -20,14 +20,14 @@ class TestSettingsManager(unittest.TestCase):
 
     def test_default_values(self):
         self.assertEqual(self.sm.get("theme"), "dark")
-        self.assertEqual(self.sm.get("language"), "tr")
-        self.assertTrue(self.sm.get("ctrl_right_click_translate"))
-        self.assertTrue(self.sm.get("windows_context_menu"))
-        self.assertTrue(self.sm.get("run_on_startup"))
-        self.assertEqual(self.sm.get("startup_mode"), "minimized")
+        self.assertEqual(self.sm.get("language"), "en")
+        self.assertFalse(self.sm.get("ctrl_right_click_translate"))
+        self.assertFalse(self.sm.get("windows_context_menu"))
+        self.assertFalse(self.sm.get("run_on_startup"))
+        self.assertEqual(self.sm.get("startup_mode"), "normal")
         self.assertFalse(self.sm.get("always_on_top"))
         self.assertTrue(self.sm.get("minimize_to_tray"))
-        self.assertTrue(self.sm.get("selection_translate"))
+        self.assertFalse(self.sm.get("selection_translate"))
         self.assertFalse(self.sm.get("double_click_translate"))
 
     def test_save_and_load(self):

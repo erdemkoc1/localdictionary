@@ -1,33 +1,48 @@
 import os
 import json
+import tempfile
 from typing import Dict, Any, Optional
-from src.utils import get_resource_path
+from src.paths import get_user_file, migrate_legacy_user_file
+from src.version import APP_VERSION
 
-SETTINGS_FILE = get_resource_path(os.path.join("data", "settings.json"))
+SETTINGS_FILE = get_user_file("settings.json")
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",                              # "dark", "light", "system"
-    "language": "tr",                             # "tr", "en"
+    "language": "en",                             # First launch is English; user's choice persists.
     "always_on_top": False,                       # Keep window on top
-    "ctrl_right_click_translate": True,           # Option 1: Ctrl + Right Click Quick Translate Popup
-    "selection_translate": True,                  # Option 2: Show floating button on text selection anywhere
-    "double_click_translate": False,              # Option 2b: Show floating button on double-click selection
-    "right_click_translate": True,                # Option 3: Show floating button on right-click
-    "windows_context_menu": True,                 # Windows Shell Context Menu & Right Click Button
-    "run_on_startup": True,                       # Windows auto-start toggle
-    "startup_mode": "minimized",                  # "normal" (foreground/open) or "minimized" (system tray / taskbar)
-    "minimize_to_tray": True,                     # Minimize to tray instead of quitting or keep in tray
-    "in_app_context_menu": True,                  # Right click context menu inside app entries/textboxes
-    "save_history": True,                         # Store search queries in history.db
+    "ctrl_right_click_translate": False,          # Explicit opt-in: global Ctrl + right-click translation
+    "selection_translate": False,                 # Explicit opt-in: floating button after text selection
+    "double_click_translate": False,              # Explicit opt-in: floating button after double-click
+    "right_click_translate": False,               # Explicit opt-in: floating button on right-click
+    "windows_context_menu": False,                # Explicit opt-in: Windows Explorer context menu
+    "run_on_startup": False,                      # Explicit opt-in: Windows auto-start
+    "startup_mode": "normal",                     # "normal" or "minimized"
+    "minimize_to_tray": True,                     # Minimize to tray instead of quitting
+    "in_app_context_menu": True,                  # In-app right-click menu
+    "save_history": True,                         # Store search queries locally in history.db
     "show_slang_profanity": True,                 # Show/filter slang, colloquial, and vulgar content
     "default_direction": "auto"                   # "auto", "en_tr", "tr_en"
+}
+
+_SETTING_VALIDATORS = {
+    "theme": lambda value: value in {"dark", "light", "system"},
+    "language": lambda value: value in {"tr", "en"},
+    "default_direction": lambda value: value in {"auto", "en_tr", "tr_en"},
+    "startup_mode": lambda value: value in {"normal", "minimized"},
+    **{key: (lambda value: type(value) is bool) for key in (
+        "always_on_top", "ctrl_right_click_translate", "selection_translate",
+        "double_click_translate", "right_click_translate", "windows_context_menu",
+        "run_on_startup", "minimize_to_tray", "in_app_context_menu",
+        "save_history", "show_slang_profanity",
+    )}
 }
 
 TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "tr": {
         # Header & Window
         "app_title": "LOCALDICTIONARY",
-        "app_subtitle": "v1.41 (Açık Kaynak / 100% Çevrimdışı - BETA)",
+        "app_subtitle": f"v{APP_VERSION} (Açık Kaynak / 100% Çevrimdışı - BETA)",
         "history_btn": "🕒 Geçmiş",
         "settings_btn": "⚙️ Ayarlar",
         
@@ -148,6 +163,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "hist_save_lbl": "Arama Geçmişini Kaydet",
         "hist_save_desc": "Aramaları yerel veritabanında kalıcı olarak saklar.",
         "hist_clear_btn": "🗑️ Geçmişi Temizle",
+        "clear_all_data_btn": "🧹 Tüm Yerel Verileri Temizle",
+        "clear_all_data_confirm": "Tüm arama geçmişi, çeviri önbelleği, düzeltmeler ve glossary silinsin mi?",
+        "clear_all_data_done": "Yerel kullanıcı verileri temizlendi.",
         "hist_cleared_msg": "Arama geçmişi başarıyla temizlendi.",
         "hist_clear_confirm_title": "Geçmişi Temizle",
         "hist_clear_confirm_msg": "Tüm arama geçmişiniz kalıcı olarak silinecek. Onaylıyor musunuz?",
@@ -163,16 +181,16 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # Section 7: About
         "sec_about": "ℹ️ Sistem ve Veritabanı Bilgisi",
-        "about_ver": "Sürüm: LocalDictionary v1.41 (Açık Kaynak / Open Source - BETA)",
-        "about_db": "Veritabanı: 2.26+ Milyon Kayıt (Bilingual, Wiktionary, FreeDict, TDK, Webster)",
+        "about_ver": f"Sürüm: LocalDictionary v{APP_VERSION} (Açık Kaynak / Open Source - BETA)",
+        "about_db": "Veritabanı: İndeksli, yerel ve çevrimdışı bilingual sözlük",
         "about_mode": "Çalışma Modu: 100% Çevrimdışı (İnternetsiz ve Yerel)",
-        "about_license": "Lisans: Açık Kaynak (MIT / Apache 2.0 / GPL Uyumlu - Tamamen Ücretsiz)",
+        "about_license": "Lisans: Kod MIT; veri ve modeller kendi lisans bildirimleriyle dağıtılır",
         "about_status_active": "● Durum: Arka planda aktif ve dinliyor",
 
         # Status Bar
         "status_ready": "Hazır",
         "status_translating": "Çevriliyor...",
-        "status_engine_badge": "● 2.2M+ Sözlük & Açık Kaynak Yerel AI (BETA - 100% Çevrimdışı)",
+        "status_engine_badge": "● Yerel Sözlük & Yerel NMT (BETA - Sıfır Ağ Trafiği)",
 
         # Context Menu
         "ctx_search_dict": "🔍 Seçileni Sözlükte Ara",
@@ -184,7 +202,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
         # Header & Window
         "app_title": "LOCALDICTIONARY",
-        "app_subtitle": "v1.41 (Open Source / 100% Offline - BETA)",
+        "app_subtitle": f"v{APP_VERSION} (Open Source / 100% Offline - BETA)",
         "history_btn": "🕒 History",
         "settings_btn": "⚙️ Settings",
 
@@ -305,6 +323,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "hist_save_lbl": "Save Search History",
         "hist_save_desc": "Persists search queries locally in SQLite history database.",
         "hist_clear_btn": "🗑️ Clear History",
+        "clear_all_data_btn": "🧹 Clear All Local Data",
+        "clear_all_data_confirm": "Delete all search history, translation cache, corrections, and glossary data?",
+        "clear_all_data_done": "Local user data was cleared.",
         "hist_cleared_msg": "Search history cleared successfully.",
         "hist_clear_confirm_title": "Clear History",
         "hist_clear_confirm_msg": "Are you sure you want to permanently clear your search history?",
@@ -320,16 +341,16 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # Section 7: About
         "sec_about": "ℹ️ System & Database Information",
-        "about_ver": "Version: LocalDictionary v1.41 (Open Source - BETA)",
-        "about_db": "Database: 2.26+ Million Records (Bilingual, Wiktionary, FreeDict, TDK, Webster)",
+        "about_ver": f"Version: LocalDictionary v{APP_VERSION} (Open Source - BETA)",
+        "about_db": "Database: Indexed, local, offline bilingual dictionary",
         "about_mode": "Mode: 100% Offline (Local & Zero Setup)",
-        "about_license": "License: Open Source (MIT / Apache 2.0 / GPL Compatible - 100% Free)",
+        "about_license": "License: Code MIT; data and models ship under their separate notices",
         "about_status_active": "● Status: Local AI engine active and ready",
 
         # Status Bar
         "status_ready": "Ready",
         "status_translating": "Translating...",
-        "status_engine_badge": "● 2.2M+ Dictionary & Open Source Local AI (BETA - 100% Offline)",
+        "status_engine_badge": "● Local Dictionary & Local NMT (BETA - Zero Network Traffic)",
 
         # Context Menu
         "ctx_search_dict": "🔍 Search in Dictionary",
@@ -343,6 +364,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 class SettingsManager:
     """Manages persistent application settings in a JSON file."""
     def __init__(self, filepath: Optional[str] = None):
+        if filepath is None:
+            migrate_legacy_user_file("settings.json")
         self.filepath = filepath or SETTINGS_FILE
         self.settings = DEFAULT_SETTINGS.copy()
         self.load()
@@ -353,21 +376,39 @@ class SettingsManager:
                 with open(self.filepath, "r", encoding="utf-8") as f:
                     saved = json.load(f)
                     if isinstance(saved, dict):
-                        # Migrate old key right_click_translate if present
+                        # Migrate the old combined quick-translation key.
                         if "right_click_translate" in saved and "ctrl_right_click_translate" not in saved:
                             saved["ctrl_right_click_translate"] = saved["right_click_translate"]
-                        self.settings.update(saved)
+                        for key, value in saved.items():
+                            if key in _SETTING_VALIDATORS and _SETTING_VALIDATORS[key](value):
+                                self.settings[key] = value
             except Exception as e:
                 print(f"Uyarı: Ayarlar dosyası okunamadı ({e}), varsayılanlar kullanılıyor.")
         return self.settings
 
     def save(self):
+        """Atomically persist settings so an interrupted write cannot corrupt them."""
+        directory = os.path.dirname(self.filepath) or "."
+        temp_path = None
         try:
-            os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
-            with open(self.filepath, "w", encoding="utf-8") as f:
+            os.makedirs(directory, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=directory, prefix=".settings-", suffix=".tmp", delete=False
+            ) as f:
+                temp_path = f.name
                 json.dump(self.settings, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, self.filepath)
+            temp_path = None
         except Exception as e:
             print(f"Hata: Ayarlar kaydedilemedi: {e}")
+        finally:
+            if temp_path:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.settings.get(key, default if default is not None else DEFAULT_SETTINGS.get(key))

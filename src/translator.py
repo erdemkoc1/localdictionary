@@ -1,11 +1,8 @@
-import os
-import sys
 import re
 import threading
-from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
 
-from src.utils import get_resource_path, turkish_lower, get_short_path
+from src.utils import turkish_lower
 from src.grammar_data import (
     SLANG_IDIOMS_EN_TR,
     SLANG_IDIOMS_TR_EN,
@@ -15,17 +12,7 @@ from src.grammar_normalizer import normalize_pos, normalize_role
 from src.user_data import UserDataManager
 from src.clause_splitter import split_into_clauses, evaluate_confidence
 from src.idiom_engine import match_idiom
-
-
-# Ensure ARGOS_PACKAGES_DIR is set early before any argostranslate module loads
-_default_models_path = get_resource_path(os.path.join("data", "models"))
-if not os.path.exists(_default_models_path):
-    _default_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "models"))
-if os.path.exists(_default_models_path):
-    _default_models_path = get_short_path(_default_models_path)
-    os.environ["ARGOS_PACKAGES_DIR"] = _default_models_path
-os.environ["ARGOS_STANZA_AVAILABLE"] = "0"
-os.environ["ARGOS_CHUNK_TYPE"] = "ARGOSTRANSLATE"
+from src.local_nmt import LocalNMTEngine, LocalNMTError
 
 
 class TranslationResult(dict):
@@ -74,9 +61,8 @@ class SentenceTranslator:
         self._is_initialized = False
         self._init_lock = threading.Lock()
         self._translate_lock = threading.Lock()
-        self._models_dir = None
-        self._argos_pkg = None
-        self._argos_tr = None
+        self._local_nmt = LocalNMTEngine()
+        self._nmt_error: Optional[str] = None
         self._syntax_engine = syntax_engine
         self.user_data = user_data if user_data is not None else UserDataManager()
 
@@ -87,69 +73,34 @@ class SentenceTranslator:
         return self._syntax_engine
 
     def _ensure_initialized(self):
+        """Verify that at least one bundled local model is available.
+
+        Model files are loaded lazily by LocalNMTEngine. No remote package
+        index, environment-provided provider, or user Argos configuration is
+        consulted.
+        """
         if self._is_initialized:
             return
 
         with self._init_lock:
             if self._is_initialized:
                 return
-
-            # Determine models directory
-            models_path = get_resource_path(os.path.join("data", "models"))
-            if not os.path.exists(models_path):
-                models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "models"))
-            models_path = get_short_path(models_path)
-
-            os.environ["ARGOS_PACKAGES_DIR"] = models_path
-            self._models_dir = models_path
-
-            try:
-                import argostranslate.settings
-                import argostranslate.package
-                import argostranslate.translate
-
-                # Prevent Stanza sentence boundary detector from unpacking/locking temporary files on Windows
-                try:
-                    import argostranslate.sbd
-                    class FastPassSentencizer:
-                        def __init__(self, *args, **kwargs):
-                            pass
-                        def split_sentences(self, text: str):
-                            return [text]
-                    argostranslate.sbd.StanzaSentencizer = FastPassSentencizer
-                    argostranslate.translate.StanzaSentencizer = FastPassSentencizer
-                except Exception:
-                    pass
-
-                p_path = Path(models_path)
-                argostranslate.settings.package_data_dir = p_path
-                if p_path not in argostranslate.settings.package_dirs:
-                    argostranslate.settings.package_dirs.insert(0, p_path)
-
-                argostranslate.package.load_available_packages()
-
-                self._argos_pkg = argostranslate.package
-                self._argos_tr = argostranslate.translate
+            if self._local_nmt.is_available("en", "tr") and self._local_nmt.is_available("tr", "en"):
                 self._is_initialized = True
-            except Exception as e:
-                print(f"[SentenceTranslator] NMT model initialization warning: {e}")
+            else:
+                self._nmt_error = "Bundled NMT models are incomplete; using offline syntax fallback."
                 self._is_initialized = False
 
     def warm_up(self):
-        """
-        Pre-loads models and executes a tiny dummy inference in a background daemon thread
-        to eliminate the cold-start delay for the user.
-        """
+        """Preload both bundled model directions without blocking application startup."""
         def _bg_warm():
             try:
                 self._ensure_initialized()
-                if self._argos_tr:
-                    with self._translate_lock:
-                        self._argos_tr.translate("hello", "en", "tr")
-                        self._argos_tr.translate("merhaba", "tr", "en")
+                if self._is_initialized:
+                    self._local_nmt.warm_up()
             except Exception:
                 pass
-        threading.Thread(target=_bg_warm, daemon=True).start()
+        threading.Thread(target=_bg_warm, name="localdictionary-nmt-init", daemon=True).start()
 
     def detect_lang(self, text: str) -> str:
         """
@@ -205,6 +156,12 @@ class SentenceTranslator:
                 (r"\bquandary\b", "ikilem"),
                 (r"\bephemeral\b", "kısa ömürlü"),
                 (r"\bubiquitous\b", "her yerde var olan"),
+                (r"\bthe\s+(?=[A-ZÇĞİÖŞÜ])", ""),
+                (r"\bshe\b", "o"),
+                (r"\bthey\b", "onlar"),
+                (r"\bwe\b", "biz"),
+                (r"\bhe\b", "o"),
+                (r"\bit\b", "o"),
             ]
             for pattern, rep in replacements:
                 res = re.sub(pattern, rep, res, flags=re.IGNORECASE)
@@ -362,10 +319,10 @@ class SentenceTranslator:
 
         # 2. Local Neural Machine Translation (CTranslate2)
         self._ensure_initialized()
-        if self._is_initialized and self._argos_tr:
+        if self._is_initialized:
             try:
                 with self._translate_lock:
-                    raw_nmt = self._argos_tr.translate(text, from_code, to_code)
+                    raw_nmt = self._local_nmt.translate(text, from_code, to_code)
                 refined = self._post_process_nmt_output(raw_nmt, from_code, to_code)
                 active_eng = "nmt"
 
@@ -423,8 +380,10 @@ class SentenceTranslator:
                     text, from_code, to_code, refined, breakdown, confidence=85, engine=active_eng, show_slang=show_slang_profanity
                 )
                 return refined, breakdown, active_eng
-            except Exception as e:
-                print(f"[SentenceTranslator] NMT inference error, falling back to syntax: {e}")
+            except LocalNMTError as e:
+                self._is_initialized = False
+                self._nmt_error = str(e)
+                print(f"[SentenceTranslator] {e} Falling back to offline syntax engine.")
 
         # 3. Fallback: Rule-Based Syntax Engine
         st = self._get_syntax_engine()
@@ -460,6 +419,12 @@ class SentenceTranslator:
         text = text.strip()
         if not text:
             return TranslationResult("", "en", "tr", [], engine="empty", confidence=100, confidence_level="high")
+        if len(text) > 20_000 or "\x00" in text:
+            detected = self.detect_lang(text[:2_000]) if text else "en"
+            target = "tr" if detected == "en" else "en"
+            return TranslationResult(
+                "", detected, target, [], engine="input_rejected", confidence=0, confidence_level="low"
+            )
 
         # Determine language
         if from_lang == "auto" or to_lang == "auto":

@@ -1,4 +1,5 @@
 import re
+import threading
 from typing import Optional, List, Tuple
 from functools import lru_cache
 from src.utils import turkish_lower
@@ -34,6 +35,15 @@ TR_ASCII_VARIANTS = {
 }
 
 
+def _synchronized(method):
+    def wrapped(self, *args, **kwargs):
+        with self._db_lock:
+            return method(self, *args, **kwargs)
+    wrapped.__name__ = method.__name__
+    wrapped.__doc__ = method.__doc__
+    return wrapped
+
+
 class SpellChecker:
     """
     Fast, offline spelling and typo correction engine for Dictionary and Sentence translation.
@@ -42,9 +52,11 @@ class SpellChecker:
     2. Typo correction via indexed B-tree prefix range and Levenshtein edit distance
     3. Sentence-level typo detection and suggestion
     """
-    def __init__(self, db_conn=None):
+    def __init__(self, db_conn=None, db_lock=None):
         self.conn = db_conn
+        self._db_lock = db_lock or threading.RLock()
 
+    @_synchronized
     def _word_exists(self, word: str) -> bool:
         if not self.conn:
             return False
@@ -56,6 +68,7 @@ class SpellChecker:
         )
         return bool(cur.fetchone())
 
+    @_synchronized
     def _get_deasciified_candidate(self, word: str) -> Optional[str]:
         """
         Attempts to reconstruct Turkish characters for ASCII-typed words.
@@ -113,12 +126,13 @@ class SpellChecker:
 
         return None
 
+    @_synchronized
     def get_word_suggestion(self, word: str, is_en: bool = False) -> Optional[str]:
         """
         Returns a spelling suggestion for an isolated word if a typo/misspelling is detected.
         Returns None if word is already valid or no close match found.
         """
-        if not word or len(word) < 3 or not self.conn:
+        if not word or len(word) < 3 or len(word) > 128 or not self.conn:
             return None
 
         w_low = turkish_lower(word.strip())
@@ -173,12 +187,13 @@ class SpellChecker:
 
         return best_cand
 
+    @_synchronized
     def get_sentence_suggestion(self, sentence: str, from_lang: str = "auto") -> Optional[str]:
         """
         Checks words in sentence for typos and missing Turkish diacritics.
         Constructs and returns the corrected sentence if changes were made, otherwise None.
         """
-        if not sentence or not self.conn:
+        if not sentence or len(sentence) > 20_000 or "\x00" in sentence or not self.conn:
             return None
 
         is_en = (from_lang == "en")

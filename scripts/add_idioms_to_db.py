@@ -241,7 +241,7 @@ def add_idioms():
             en_primary = en_meanings.split(",")[0].strip()
             cur.execute("""
                 INSERT INTO bilingual (en, tr, type, category, en_lower, tr_lower)
-                VALUES (?, ?, ?, 'TDK Atasözleri ve Deyimler', ?, ?);
+                VALUES (?, ?, ?, 'Curated Idioms', ?, ?);
             """, (en_meanings, tr_clean, wtype, en_primary.lower(), tr_low))
             added_tr += 1
 
