@@ -301,11 +301,21 @@ class SentenceTranslator:
                     c_trans, c_bd, c_eng = self._translate_single_sentence(
                         c_text, from_code, to_code, show_slang_profanity=show_slang_profanity
                     )
-                    clause_translated.append(c_trans.rstrip(".!?") + c_conn)
+                    clean_connector = c_conn
+                    if from_code == "en" and to_code == "tr":
+                        # The splitter keeps English function words in the
+                        # connector (for example ", the"); do not paste those
+                        # artifacts into the Turkish sentence.
+                        clean_connector = re.sub(
+                            r"\b(?:the|she|they|we|he|it)\b", "", clean_connector, flags=re.IGNORECASE
+                        )
+                    clause_translated.append(c_trans.rstrip(".!?") + clean_connector)
                     clause_breakdown.extend(c_bd)
                     clause_engines.add(c_eng)
 
                 merged_text = " ".join(clause_translated).strip()
+                merged_text = re.sub(r"\s+([.,!?;:])", r"\1", merged_text)
+                merged_text = re.sub(r"\s{2,}", " ", merged_text).strip()
                 p = text[-1] if text and text[-1] in ".!?" else "."
                 if not merged_text.endswith((".", "!", "?")):
                     merged_text += p
