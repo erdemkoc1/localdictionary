@@ -8,7 +8,10 @@ from src.utils import turkish_lower
 
 MAX_TRANSLATION_CHARS = 20_000
 MAX_GLOSSARY_TERM_CHARS = 512
+MAX_GLOSSARY_NOTES_CHARS = 1_000
 MAX_CACHE_ROWS = 5_000
+MAX_CORRECTION_ROWS = 5_000
+MAX_GLOSSARY_ROWS = 5_000
 
 
 def normalize_user_text(text: str, language: str = "") -> str:
@@ -93,6 +96,28 @@ class UserDataManager:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_glossary_pair ON user_glossary(lang_pair);")
 
+        # Enforce retention limits on existing local databases as well as new
+        # writes, so an old profile cannot grow without bound.
+        cur.execute("""
+            DELETE FROM translation_cache
+            WHERE cache_key NOT IN (
+                SELECT cache_key FROM translation_cache
+                ORDER BY created_at DESC, rowid DESC LIMIT ?
+            )
+        """, (MAX_CACHE_ROWS,))
+        cur.execute("""
+            DELETE FROM user_corrections
+            WHERE id NOT IN (
+                SELECT id FROM user_corrections ORDER BY id DESC LIMIT ?
+            )
+        """, (MAX_CORRECTION_ROWS,))
+        cur.execute("""
+            DELETE FROM user_glossary
+            WHERE id NOT IN (
+                SELECT id FROM user_glossary ORDER BY id DESC LIMIT ?
+            )
+        """, (MAX_GLOSSARY_ROWS,))
+
         conn.commit()
         conn.close()
 
@@ -109,6 +134,8 @@ class UserDataManager:
         self, text: str, from_code: str, to_code: str, show_slang: bool = True
     ) -> Optional[Dict[str, Any]]:
         """Returns cached translation if available, or None."""
+        if not isinstance(text, str) or len(text) > MAX_TRANSLATION_CHARS or "\x00" in text:
+            return None
         key = self._compute_cache_key(text, from_code, to_code, show_slang)
         conn = self._get_connection()
         cur = conn.cursor()
@@ -212,6 +239,8 @@ class UserDataManager:
     # =========================================================================
     def get_correction(self, text: str, from_code: str = "auto", to_code: str = "auto", **kwargs) -> Optional[str]:
         """Checks if the user has manually corrected this input before."""
+        if not isinstance(text, str) or len(text) > MAX_TRANSLATION_CHARS or "\x00" in text:
+            return None
         f_code = kwargs.get("from_code") or kwargs.get("from_lang") or from_code
         t_code = kwargs.get("to_code") or kwargs.get("to_lang") or to_code
         norm = normalize_user_text(text, f_code)
@@ -258,6 +287,12 @@ class UserDataManager:
                 original_input = excluded.original_input,
                 created_at = CURRENT_TIMESTAMP;
         """, (norm, f_code, t_code, clean_input, clean_corr))
+        cur.execute("""
+            DELETE FROM user_corrections
+            WHERE id NOT IN (
+                SELECT id FROM user_corrections ORDER BY id DESC LIMIT ?
+            )
+        """, (MAX_CORRECTION_ROWS,))
         conn.commit()
         conn.close()
 
@@ -275,8 +310,9 @@ class UserDataManager:
         cur.execute("""
             SELECT id, original_input, from_code, to_code, corrected_text, created_at
             FROM user_corrections
-            ORDER BY created_at DESC;
-        """)
+            ORDER BY created_at DESC
+            LIMIT ?;
+        """, (MAX_CORRECTION_ROWS,))
         rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -311,14 +347,16 @@ class UserDataManager:
                 SELECT id, source_term, target_term, lang_pair, case_sensitive, notes, created_at
                 FROM user_glossary
                 WHERE lang_pair = ? OR lang_pair = 'any'
-                ORDER BY length(source_term) DESC;
-            """, (lang_pair,))
+                ORDER BY length(source_term) DESC
+                LIMIT ?;
+            """, (lang_pair, MAX_GLOSSARY_ROWS))
         else:
             cur.execute("""
                 SELECT id, source_term, target_term, lang_pair, case_sensitive, notes, created_at
                 FROM user_glossary
-                ORDER BY length(source_term) DESC;
-            """)
+                ORDER BY length(source_term) DESC
+                LIMIT ?;
+            """, (MAX_GLOSSARY_ROWS,))
         rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -334,7 +372,8 @@ class UserDataManager:
         """Adds or updates a custom term in user glossary. Returns inserted row ID."""
         src = source_term.strip()[:MAX_GLOSSARY_TERM_CHARS]
         tgt = target_term.strip()[:MAX_GLOSSARY_TERM_CHARS]
-        if not src or not tgt or "\x00" in src or "\x00" in tgt:
+        clean_notes = notes.strip()[:MAX_GLOSSARY_NOTES_CHARS]
+        if not src or not tgt or "\x00" in src or "\x00" in tgt or "\x00" in clean_notes:
             return 0
         if lang_pair not in {"any", "en_tr", "tr_en", "auto_auto"}:
             lang_pair = "any"
@@ -345,7 +384,13 @@ class UserDataManager:
             INSERT INTO user_glossary (
                 source_term, target_term, lang_pair, case_sensitive, notes, created_at
             ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
-        """, (src, tgt, lang_pair, 1 if case_sensitive else 0, notes.strip()))
+        """, (src, tgt, lang_pair, 1 if case_sensitive else 0, clean_notes))
+        cur.execute("""
+            DELETE FROM user_glossary
+            WHERE id NOT IN (
+                SELECT id FROM user_glossary ORDER BY id DESC LIMIT ?
+            )
+        """, (MAX_GLOSSARY_ROWS,))
         conn.commit()
         last_id = cur.lastrowid
         conn.close()

@@ -1,5 +1,6 @@
 import sys
 import os
+import sqlite3
 import unittest
 import tempfile
 
@@ -7,6 +8,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.user_data import UserDataManager
+from src import user_data as user_data_module
 from src.clause_splitter import split_into_clauses, evaluate_confidence
 
 
@@ -52,6 +54,39 @@ class TestUserDataManager(unittest.TestCase):
 
         # Non-existent correction should return None
         self.assertIsNone(self.udm.get_correction("Unknown text", "en", "tr"))
+
+    def test_local_data_retention_limits(self):
+        old_limits = (
+            user_data_module.MAX_CACHE_ROWS,
+            user_data_module.MAX_CORRECTION_ROWS,
+            user_data_module.MAX_GLOSSARY_ROWS,
+        )
+        user_data_module.MAX_CACHE_ROWS = 2
+        user_data_module.MAX_CORRECTION_ROWS = 2
+        user_data_module.MAX_GLOSSARY_ROWS = 2
+        try:
+            for index in range(3):
+                self.udm.set_cached_translation(
+                    f"cache source {index}", "en", "tr", f"cache target {index}"
+                )
+                self.udm.save_correction(
+                    f"correction source {index}", "en", "tr", f"correction target {index}"
+                )
+                self.udm.add_glossary_term(f"term {index}", f"terim {index}")
+
+            with sqlite3.connect(self.tmp.name) as connection:
+                counts = [
+                    connection.execute("SELECT COUNT(*) FROM translation_cache").fetchone()[0],
+                    connection.execute("SELECT COUNT(*) FROM user_corrections").fetchone()[0],
+                    connection.execute("SELECT COUNT(*) FROM user_glossary").fetchone()[0],
+                ]
+            self.assertEqual(counts, [2, 2, 2])
+        finally:
+            (
+                user_data_module.MAX_CACHE_ROWS,
+                user_data_module.MAX_CORRECTION_ROWS,
+                user_data_module.MAX_GLOSSARY_ROWS,
+            ) = old_limits
 
     def test_glossary_crud_and_apply(self):
         # Add term
