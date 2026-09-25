@@ -5,6 +5,23 @@ from functools import lru_cache
 from src.utils import turkish_lower
 
 
+_PREFIX_SQL_EN = """
+    SELECT DISTINCT en_lower
+    FROM bilingual
+    WHERE en_lower >= ? AND en_lower < ?
+      AND length(en_lower) BETWEEN ? AND ?
+    LIMIT 80;
+"""
+
+_PREFIX_SQL_TR = """
+    SELECT DISTINCT tr_lower
+    FROM bilingual
+    WHERE tr_lower >= ? AND tr_lower < ?
+      AND length(tr_lower) BETWEEN ? AND ?
+    LIMIT 80;
+"""
+
+
 def levenshtein_distance(s1: str, s2: str) -> int:
     """Computes Levenshtein edit distance between two strings."""
     if len(s1) < len(s2):
@@ -152,10 +169,10 @@ class SpellChecker:
         pref_lengths = [max(2, len(w_low) - 2), max(2, len(w_low) - 3)]
         
         cur = self.conn.cursor()
-        col = "en_lower" if is_en else "tr_lower"
         max_dist = 1 if len(w_low) <= 4 else 2
         min_len = max(1, len(w_low) - max_dist)
         max_len = len(w_low) + max_dist
+        query = _PREFIX_SQL_EN if is_en else _PREFIX_SQL_TR
 
         best_cand = None
         best_dist = 999
@@ -163,14 +180,6 @@ class SpellChecker:
         for plen in pref_lengths:
             prefix = w_low[:plen]
             next_prefix = prefix[:-1] + chr(ord(prefix[-1]) + 1)
-
-            query = f"""
-                SELECT DISTINCT {col}
-                FROM bilingual 
-                WHERE {col} >= ? AND {col} < ?
-                  AND length({col}) BETWEEN ? AND ?
-                LIMIT 80;
-            """
             cur.execute(query, (prefix, next_prefix, min_len, max_len))
             candidates = [r[0] for r in cur.fetchall()]
 
