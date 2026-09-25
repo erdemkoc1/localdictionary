@@ -4,6 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
+from PIL import Image
 from typing import Optional, List, Dict, Any
 
 from src.db import DictionaryDB
@@ -24,6 +25,24 @@ from src.tray import AppTrayIcon
 from src.user_data import UserDataManager
 from src.grammar_normalizer import normalize_pos, normalize_role
 from src.version import APP_VERSION
+from src.utils import get_resource_path
+
+
+def _apply_window_icon(window):
+    """Apply the same blue LD mark to a Tk window and its title/taskbar icon."""
+    ico_path = get_resource_path(os.path.join("assets", "localdictionary.ico"))
+    png_path = get_resource_path(os.path.join("assets", "localdictionary.png"))
+    try:
+        if os.path.isfile(ico_path):
+            window.iconbitmap(default=ico_path)
+    except Exception:
+        pass
+    try:
+        if os.path.isfile(png_path):
+            window._localdictionary_icon_photo = tk.PhotoImage(master=window, file=png_path)
+            window.iconphoto(True, window._localdictionary_icon_photo)
+    except Exception:
+        pass
 
 
 def _safe_grab(widget):
@@ -1023,6 +1042,7 @@ class TranslatorApp(ctk.CTk):
         self.title(f"LocalDictionary v{APP_VERSION} - {badge_txt}")
         self.geometry("1060x760")
         self.minsize(860, 600)
+        _apply_window_icon(self)
 
         if self.settings.get("always_on_top", False):
             self.attributes("-topmost", True)
@@ -1138,6 +1158,29 @@ class TranslatorApp(ctk.CTk):
         self.header_frame = ctk.CTkFrame(self, corner_radius=0, height=55)
         self.header_frame.pack(fill="x", padx=0, pady=0)
         self.header_frame.pack_propagate(False)
+
+        # Shared blue LD brand mark (also used by the tray and EXE icon).
+        logo_path = get_resource_path(os.path.join("assets", "localdictionary.png"))
+        if os.path.isfile(logo_path):
+            try:
+                with Image.open(logo_path) as logo_source:
+                    logo_image = ctk.CTkImage(
+                        light_image=logo_source.copy(),
+                        dark_image=logo_source.copy(),
+                        size=(38, 38),
+                    )
+                self.logo_label = ctk.CTkLabel(
+                    self.header_frame,
+                    image=logo_image,
+                    text="",
+                    width=38,
+                    height=38,
+                )
+                self.logo_label.pack(side="left", padx=(14, 8), pady=8)
+            except Exception:
+                self.logo_label = None
+        else:
+            self.logo_label = None
 
         # App Title & Subtitle
         self.title_label = ctk.CTkLabel(

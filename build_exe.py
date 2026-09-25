@@ -40,6 +40,8 @@ def _validate_assets() -> None:
         BASE_DIR / "data" / "dictionary.db",
         BASE_DIR / "data" / "models" / "translate-tr_en-1_5" / "model",
         BASE_DIR / "data" / "models" / "translate-en_tr-1_5" / "model",
+        BASE_DIR / "assets" / "localdictionary.ico",
+        BASE_DIR / "assets" / "localdictionary.png",
         BASE_DIR / "LICENSES" / "README.md",
         BASE_DIR / "LICENSES" / "GPL-2.0-FreeDict.txt",
         BASE_DIR / "LICENSES" / "CC-BY-SA-4.0.txt",
@@ -80,6 +82,10 @@ def _copy_release_assets() -> None:
     if source_licenses.is_dir():
         shutil.copytree(source_licenses, APP_DIR / "LICENSES", dirs_exist_ok=True)
 
+    source_assets = BASE_DIR / "assets"
+    if source_assets.is_dir():
+        shutil.copytree(source_assets, APP_DIR / "assets", dirs_exist_ok=True)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -107,6 +113,7 @@ def _write_source_manifest() -> Path:
     source_assets = [BASE_DIR / "data" / "dictionary.db"]
     source_assets.extend(path for path in (BASE_DIR / "data" / "models").rglob("*") if path.is_file())
     source_assets.extend(path for path in (BASE_DIR / "LICENSES").rglob("*") if path.is_file())
+    source_assets.extend(path for path in (BASE_DIR / "assets").rglob("*") if path.is_file())
     manifest = APP_DIR / "RELEASE_MANIFEST.json"
     payload = {
         "application": APP_NAME,
@@ -177,6 +184,7 @@ def build(make_zip: bool = True) -> tuple[Path, Path | None]:
     command = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
         "--windowed", "--noupx", "--name", TARGET_NAME,
+        "--icon", str(BASE_DIR / "assets" / "localdictionary.ico"),
         "--specpath", str(BASE_DIR / "build"),
         "--collect-all", "customtkinter",
         "--collect-all", "pystray",
