@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.utils import turkish_lower
 
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "dictionary.db"))
-TDK_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "tdk_v12.sqlite3.db"))
 ENG_TUR_TEI = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "eng-tur.tei"))
 TUR_ENG_TEI = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "tur-eng.tei"))
 WIKTIONARY_TSV = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "wiktionary_tr_en.tsv"))
@@ -170,40 +169,6 @@ def parse_wiktionary_tr_en(existing: Set[Tuple[str, str]]) -> List[Tuple[str, st
                     existing.add((inf_target_lower, form_lower))
 
     print(f"Wiktionary'den {len(new_rows):,} yeni çekim ve kök çifti çıkarıldı.")
-    return new_rows
-
-def parse_tdk_atasozu(existing: Set[Tuple[str, str]]) -> List[Tuple[str, str, str, str, str, str]]:
-    print("TDK Atasözleri ve Deyimler işleniyor...")
-    if not os.path.exists(TDK_PATH):
-        print("tdk_v12.sqlite3.db bulunamadı, atlanıyor.")
-        return []
-
-    conn = sqlite3.connect(TDK_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT a.madde, an.anlam
-    FROM atasozu a
-    JOIN anlam an ON a.madde_id = an.madde_id
-    WHERE a.madde IS NOT NULL AND an.anlam IS NOT NULL
-    """)
-    rows = cur.fetchall()
-    conn.close()
-
-    new_rows = []
-    for madde, anlam in rows:
-        tr_phrase = clean_text(madde)
-        meaning = clean_text(anlam)
-        if not tr_phrase or not meaning:
-            continue
-
-        tr_lower = turkish_lower(tr_phrase)
-        meaning_lower = turkish_lower(meaning)
-
-        if (meaning_lower, tr_lower) not in existing:
-            new_rows.append((meaning, tr_phrase, "deyim/atasözü", "TDK Atasözleri ve Deyimler", meaning_lower, tr_lower))
-            existing.add((meaning_lower, tr_lower))
-
-    print(f"TDK'dan {len(new_rows):,} atasözü ve deyim çıkarıldı.")
     return new_rows
 
 def get_english_irregular_and_inflections(existing: Set[Tuple[str, str]]) -> List[Tuple[str, str, str, str, str, str]]:
@@ -413,7 +378,6 @@ def main():
     all_new_rows.extend(get_english_irregular_and_inflections(existing))
     all_new_rows.extend(parse_freedict_eng_tur(existing))
     all_new_rows.extend(parse_freedict_tur_eng(existing))
-    all_new_rows.extend(parse_tdk_atasozu(existing))
     all_new_rows.extend(parse_wiktionary_tr_en(existing))
 
     print(f"\nToplam eklenecek yeni kayıt sayısı: {len(all_new_rows):,}")

@@ -10,6 +10,7 @@ from typing import Optional, Callable
 # Windows API for global hotkeys, mouse detection & clipboard
 try:
     import ctypes
+    from ctypes import wintypes
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
     
@@ -31,6 +32,12 @@ try:
     kernel32.GlobalLock.restype = ctypes.c_void_p
     kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
     kernel32.GlobalUnlock.restype = ctypes.c_bool
+    user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+    user32.GetCursorPos.restype = wintypes.BOOL
+    user32.WindowFromPoint.argtypes = [wintypes.POINT]
+    user32.WindowFromPoint.restype = wintypes.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 
     HAS_USER32 = True
 except Exception:
@@ -302,6 +309,7 @@ class GlobalQuickTranslateService:
         self.db = db
         self.syntax_translator = syntax_translator
         self.running = False
+        self._stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
 
         self.last_trigger_time = 0.0
@@ -313,75 +321,50 @@ class GlobalQuickTranslateService:
         self.rbutton_is_down = False
 
     def start(self):
-        if not HAS_USER32 or self.running:
+        if not HAS_USER32 or (self.thread and self.thread.is_alive()):
             return
+        self._stop_event.clear()
         self.running = True
-        self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.thread = threading.Thread(
+            target=self._monitor_loop, name="localdictionary-quick-translate", daemon=True
+        )
         self.thread.start()
 
     def stop(self):
         self.running = False
+        self._stop_event.set()
+        thread = self.thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
 
-    def _is_inside_own_window(self, cx: int, cy: int) -> bool:
-        """Checks if cursor is currently within LocalDictionary's own windows."""
+    def _is_inside_own_window(self, point) -> bool:
+        """Check window ownership through Win32 without touching Tk from a thread."""
         try:
-            # Main window
-            if self.app.winfo_viewable():
-                wx, wy = self.app.winfo_rootx(), self.app.winfo_rooty()
-                ww, wh = self.app.winfo_width(), self.app.winfo_height()
-                if wx <= cx <= wx + ww and wy <= cy <= wy + wh:
-                    return True
-            # Settings window
-            if hasattr(self.app, "settings_window") and self.app.settings_window and self.app.settings_window.winfo_exists():
-                sw = self.app.settings_window
-                if sw.winfo_viewable():
-                    sx, sy = sw.winfo_rootx(), sw.winfo_rooty()
-                    if sx <= cx <= sx + sw.winfo_width() and sy <= cy <= sy + sw.winfo_height():
-                        return True
-            # Quick popup
-            if hasattr(self.app, "current_popup") and self.app.current_popup and self.app.current_popup.winfo_exists():
-                qp = self.app.current_popup
-                if qp.winfo_viewable():
-                    qx, qy = qp.winfo_rootx(), qp.winfo_rooty()
-                    if qx <= cx <= qx + qp.winfo_width() and qy <= cy <= qy + qp.winfo_height():
-                        return True
+            hwnd = user32.WindowFromPoint(point)
+            if not hwnd:
+                return False
+            process_id = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+            return process_id.value == os.getpid()
         except Exception:
-            pass
-        return False
-
-    def _is_inside_quick_button(self, cx: int, cy: int) -> bool:
-        """Checks if cursor is currently clicking on the floating quick button."""
-        try:
-            if hasattr(self.app, "current_quick_btn") and self.app.current_quick_btn and self.app.current_quick_btn.winfo_exists():
-                qb = self.app.current_quick_btn
-                if qb.winfo_viewable():
-                    bx = qb.winfo_rootx()
-                    by = qb.winfo_rooty()
-                    bw = qb.winfo_width()
-                    bh = qb.winfo_height()
-                    if bx <= cx <= bx + bw and by <= cy <= by + bh:
-                        return True
-        except Exception:
-            pass
-        return False
+            return False
 
     def _monitor_loop(self):
-        class POINT(ctypes.Structure):
-            _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+        pt = wintypes.POINT()
 
-        pt = POINT()
-
-        while self.running:
+        while not self._stop_event.is_set():
             try:
-                time.sleep(0.03)  # 30ms sleep (very low CPU usage)
+                if self._stop_event.wait(0.03):
+                    break
 
-                ctrl_rc_enabled = self.settings.get("ctrl_right_click_translate", True)
-                rc_btn_enabled = self.settings.get("right_click_translate", True) or self.settings.get("windows_context_menu", True)
-                sel_enabled = self.settings.get("selection_translate", True)
+                ctrl_rc_enabled = self.settings.get("ctrl_right_click_translate", False)
+                rc_btn_enabled = self.settings.get("right_click_translate", False) or self.settings.get("windows_context_menu", False)
+                sel_enabled = self.settings.get("selection_translate", False)
                 dbl_enabled = self.settings.get("double_click_translate", False)
 
                 if not (ctrl_rc_enabled or rc_btn_enabled or sel_enabled or dbl_enabled):
-                    time.sleep(0.3)
+                    if self._stop_event.wait(0.3):
+                        break
                     continue
 
                 user32.GetCursorPos(ctypes.byref(pt))
@@ -394,7 +377,7 @@ class GlobalQuickTranslateService:
                 now = time.time()
 
                 # Don't trigger if cursor is inside LocalDictionary's own windows
-                if self._is_inside_own_window(cx, cy):
+                if self._is_inside_own_window(pt):
                     self.lbutton_is_down = l_down
                     self.rbutton_is_down = r_down
                     continue
@@ -404,10 +387,6 @@ class GlobalQuickTranslateService:
                     self.lbutton_is_down = True
                     self.lbutton_down_pos = (cx, cy)
                     self.lbutton_down_time = now
-
-                    # If clicking elsewhere on screen, dismiss any lingering quick button
-                    if not self._is_inside_quick_button(cx, cy):
-                        self.app.after(0, self.app.dismiss_quick_button)
 
                 elif not l_down and self.lbutton_is_down:
                     self.lbutton_is_down = False
@@ -434,7 +413,8 @@ class GlobalQuickTranslateService:
                     should_trigger = (is_drag and sel_enabled) or (is_double_click and dbl_enabled)
                     if should_trigger:
                         if now - self.last_trigger_time > 0.45:
-                            time.sleep(0.04)  # brief wait for browser to paint selection
+                            if self._stop_event.wait(0.04):
+                                break
                             self._try_capture_and_show(cx, cy, immediate=False)
 
                 # --- 2. Right Mouse Button (Right-Click & Ctrl + Right-Click) ---
@@ -446,13 +426,17 @@ class GlobalQuickTranslateService:
                             self._try_capture_and_show(cx, cy, immediate=True)
                         elif not ctrl_down and rc_btn_enabled:
                             self.last_trigger_time = now
-                            time.sleep(0.03)  # brief pause for right-click event
+                            if self._stop_event.wait(0.03):
+                                break
                             self._try_capture_and_show(cx, cy, immediate=False)
                 elif not r_down and self.rbutton_is_down:
                     self.rbutton_is_down = False
 
             except Exception:
-                time.sleep(0.5)
+                if self._stop_event.wait(0.5):
+                    break
+
+        self.running = False
 
     def _try_capture_and_show(self, cx: int, cy: int, immediate: bool = False):
         """Attempts to copy selected text via simulated Ctrl+C and verifies sequence number."""

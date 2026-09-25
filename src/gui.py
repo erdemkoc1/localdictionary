@@ -21,7 +21,17 @@ from src.platform_win import (
     get_windows_context_menu
 )
 from src.tray import AppTrayIcon
+from src.user_data import UserDataManager
 from src.grammar_normalizer import normalize_pos, normalize_role
+from src.version import APP_VERSION
+
+
+def _safe_grab(widget):
+    try:
+        widget.grab_set()
+    except tk.TclError:
+        # A test runner or another desktop window may already own the Tcl grab.
+        pass
 
 
 class HistoryWindow(ctk.CTkToplevel):
@@ -36,7 +46,7 @@ class HistoryWindow(ctk.CTkToplevel):
         self.geometry("580x430")
         self.minsize(460, 320)
         self.transient(parent)
-        self.grab_set()
+        _safe_grab(self)
 
         self.setup_ui()
         self.load_history()
@@ -153,7 +163,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.geometry("660x680")
         self.minsize(540, 500)
         self.transient(parent)
-        self.grab_set()
+        _safe_grab(self)
 
         self.setup_ui()
 
@@ -568,6 +578,17 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.btn_clear_hist.pack(side="left")
 
+        self.btn_clear_all_data = ctk.CTkButton(
+            row_hist_btn,
+            text=self.gt("clear_all_data_btn"),
+            width=210,
+            height=30,
+            fg_color=("#D32F2F", "#B71C1C"),
+            hover_color=("#B71C1C", "#8E0000"),
+            command=self.clear_all_local_data,
+        )
+        self.btn_clear_all_data.pack(side="left", padx=(10, 0))
+
         # ---------------- CARD 7: System & About ----------------
         card_about = ctk.CTkFrame(self.scroll)
         card_about.pack(fill="x", padx=6, pady=6)
@@ -622,44 +643,42 @@ class SettingsWindow(ctk.CTkToplevel):
         self.parent.apply_language()
         self.refresh_ui()
 
+    def _sync_quick_service(self):
+        service = getattr(self.parent, "quick_service", None)
+        if service is None:
+            return
+        if self.parent.quick_features_enabled():
+            service.start()
+        elif service.running:
+            service.stop()
+
     def on_selection_changed(self):
         val = bool(self.selection_switch.get())
         self.settings.set("selection_translate", val)
+        self._sync_quick_service()
 
     def on_double_click_changed(self):
         val = bool(self.double_click_switch.get())
         self.settings.set("double_click_translate", val)
+        self._sync_quick_service()
 
     def on_ctrl_rc_changed(self):
         val = bool(self.ctrl_rc_switch.get())
         self.settings.set("ctrl_right_click_translate", val)
+        self._sync_quick_service()
 
     def on_win_ctx_changed(self):
         val = bool(self.win_ctx_switch.get())
         self.settings.set("windows_context_menu", val)
         menu_title = "LocalDictionary ile Çevir" if self.settings.get("language", "tr") == "tr" else "Translate with LocalDictionary"
-        set_windows_context_menu(val, menu_title)
+        applied = set_windows_context_menu(val, menu_title)
+        if val and not applied:
+            val = False
+            self.settings.set("windows_context_menu", False)
+            self.win_ctx_switch.deselect()
+        self._sync_quick_service()
 
         if val:
-            # 1. Keep running in system tray when closed
-            self.settings.set("minimize_to_tray", True)
-            if hasattr(self, "tray_min_switch"):
-                self.tray_min_switch.select()
-
-            # 2. Enable startup in background so it starts in system tray on boot
-            self.settings.set("run_on_startup", True)
-            self.settings.set("startup_mode", "minimized")
-            if hasattr(self, "startup_switch"):
-                self.startup_switch.select()
-            if hasattr(self, "mode_selector"):
-                self.mode_selector.set(self.gt("startup_mode_minimized"))
-            set_windows_startup(True, "minimized")
-
-            # 3. Ensure tray icon is actively running
-            if hasattr(self.parent, "tray") and self.parent.tray:
-                self.parent.tray.start()
-
-            # 4. Show success status label in green
             self.lbl_win_ctx_desc.configure(
                 text=self.gt("win_ctx_desc") + "\n" + self.gt("win_ctx_active_notice"),
                 text_color="#4CAF50"
@@ -676,9 +695,12 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def on_startup_changed(self):
         val = bool(self.startup_switch.get())
-        self.settings.set("run_on_startup", val)
         mode = self.settings.get("startup_mode", "normal")
-        set_windows_startup(val, mode)
+        applied = set_windows_startup(val, mode)
+        if val and not applied:
+            val = False
+            self.startup_switch.deselect()
+        self.settings.set("run_on_startup", val)
 
     def on_startup_mode_changed(self, choice):
         mode = "normal" if "Normal" in choice or "Open" in choice else "minimized"
@@ -704,6 +726,16 @@ class SettingsWindow(ctk.CTkToplevel):
             self.parent.update_quick_history()
             messagebox.showinfo(self.gt("history_btn"), self.gt("hist_cleared_msg"), parent=self)
 
+    def clear_all_local_data(self):
+        if not messagebox.askyesno(
+            self.gt("sec_history"), self.gt("clear_all_data_confirm"), parent=self
+        ):
+            return
+        self.parent.history.clear_all()
+        self.parent.sentence_translator.user_data.clear_all_user_data()
+        self.parent.update_quick_history()
+        messagebox.showinfo(self.gt("sec_history"), self.gt("clear_all_data_done"), parent=self)
+
     def refresh_ui(self):
         for child in self.winfo_children():
             child.destroy()
@@ -726,7 +758,7 @@ class GlossaryWindow(ctk.CTkToplevel):
         self.geometry("680x520")
         self.minsize(540, 420)
         self.transient(parent)
-        self.grab_set()
+        _safe_grab(self)
 
         self.setup_ui()
         self.load_terms()
@@ -882,7 +914,7 @@ class CorrectionDialog(ctk.CTkToplevel):
         self.geometry("580x420")
         self.minsize(480, 360)
         self.transient(parent)
-        self.grab_set()
+        _safe_grab(self)
 
         self.setup_ui()
 
@@ -959,7 +991,6 @@ class CorrectionDialog(ctk.CTkToplevel):
 
         user_data = self.parent.sentence_translator.user_data
         user_data.save_correction(self.source_text, new_text, self.from_lang, self.to_lang)
-        user_data.set_cached_translation(self.source_text, self.from_lang, self.to_lang, new_text, "user_correction", 100)
 
         if self.on_save_callback:
             self.on_save_callback(new_text)
@@ -969,14 +1000,19 @@ class CorrectionDialog(ctk.CTkToplevel):
 
 
 class TranslatorApp(ctk.CTk):
-    def __init__(self, start_minimized: bool = False):
+    def __init__(
+        self,
+        start_minimized: bool = False,
+        settings_file: Optional[str] = None,
+        user_data_dir: Optional[str] = None,
+    ):
         super().__init__()
 
         # Explicit Taskbar AppUserModelID
-        set_app_user_model_id("LocalDictionary.App.1.41")
+        set_app_user_model_id("LocalDictionary.App.1.42")
 
         # 1. Load Settings & Configuration
-        self.settings = SettingsManager()
+        self.settings = SettingsManager(settings_file)
         self.current_theme = self.settings.get("theme", "dark")
         ctk.set_appearance_mode(self.current_theme)
         ctk.set_default_color_theme("blue")
@@ -984,7 +1020,7 @@ class TranslatorApp(ctk.CTk):
         # Window settings
         is_tr = self.settings.get("language", "tr") == "tr"
         badge_txt = "Açık Kaynak (BETA)" if is_tr else "Open Source (BETA)"
-        self.title(f"LocalDictionary v1.41 - {badge_txt}")
+        self.title(f"LocalDictionary v{APP_VERSION} - {badge_txt}")
         self.geometry("1060x760")
         self.minsize(860, 600)
 
@@ -998,16 +1034,27 @@ class TranslatorApp(ctk.CTk):
             self.show_fatal_error(str(e))
             return
 
-        self.history = HistoryManager()
-        self.spell_checker = SpellChecker(db_conn=self.db.conn)
+        if user_data_dir:
+            os.makedirs(user_data_dir, exist_ok=True)
+            history_path = os.path.join(user_data_dir, "history.db")
+            user_data_path = os.path.join(user_data_dir, "user_data.db")
+        else:
+            history_path = None
+            user_data_path = None
+        self.history = HistoryManager(history_path)
+        self.spell_checker = SpellChecker(db_conn=self.db.conn, db_lock=self.db.connection_lock)
         self.syntax_translator = SyntaxTranslator()
-        self.sentence_translator = SentenceTranslator(syntax_engine=self.syntax_translator)
+        self.sentence_translator = SentenceTranslator(
+            syntax_engine=self.syntax_translator,
+            user_data=UserDataManager(user_data_path) if user_data_path else None,
+        )
         self.sentence_translator.warm_up()
         self.history_window: Optional[HistoryWindow] = None
         self.settings_window: Optional[SettingsWindow] = None
         self.glossary_window: Optional[GlossaryWindow] = None
         self.correction_dialog: Optional[CorrectionDialog] = None
         self._last_translation_source: str = ""
+        self._translation_generation = 0
         self._last_translation_from: str = "auto"
         self._last_translation_to: str = "auto"
         self.current_popup: Optional[QuickTranslatePopup] = None
@@ -1024,10 +1071,10 @@ class TranslatorApp(ctk.CTk):
         # 4. Attach In-App Context Menus
         self.setup_context_menus()
 
-        # 5. Start Global Quick Translate Service (using hybrid NMT sentence translator)
+        # 5. Start global quick translation only after the user opts in.
         self.quick_service = GlobalQuickTranslateService(self, self.settings, self.db, self.sentence_translator)
-
-        self.quick_service.start()
+        if self.quick_features_enabled():
+            self.quick_service.start()
 
         # 6. Start Windows System Tray Icon
         self.tray = AppTrayIcon(self, self.show_window, self.open_settings_window, self.quit_app)
@@ -1050,6 +1097,16 @@ class TranslatorApp(ctk.CTk):
                 self.perform_search(query, save_to_history=False)
             else:
                 self.perform_search("welcome", save_to_history=False)
+
+    def quick_features_enabled(self) -> bool:
+        """Return True only when at least one global interaction feature is enabled."""
+        return any(bool(self.settings.get(key, False)) for key in (
+            "ctrl_right_click_translate",
+            "selection_translate",
+            "double_click_translate",
+            "right_click_translate",
+            "windows_context_menu",
+        ))
 
     def gt(self, key: str) -> str:
         """Localization helper."""
@@ -1616,7 +1673,16 @@ class TranslatorApp(ctk.CTk):
         if not text:
             self.sent_suggestion_frame.pack_forget()
             return
+        if len(text) > 20_000 or "\x00" in text:
+            messagebox.showwarning(
+                self.gt("sent_input_lbl"),
+                "Input is limited to 20,000 characters and cannot contain null bytes.",
+                parent=self,
+            )
+            return
 
+        self._translation_generation += 1
+        generation = self._translation_generation
         choice = self.sent_dir_selector.get()
         if choice in ("İngilizce ➔ Türkçe", "English ➔ Turkish"):
             from_l, to_l = "en", "tr"
@@ -1662,6 +1728,10 @@ class TranslatorApp(ctk.CTk):
                 )
 
             def _update_ui():
+                if generation != self._translation_generation:
+                    return
+                self._last_translation_from = res.get("from_code", from_l)
+                self._last_translation_to = res.get("to_code", to_l)
                 self.sent_output.configure(state="normal")
                 self.sent_output.delete("0.0", "end")
                 self.sent_output.delete("1.0", "end")
@@ -1713,7 +1783,10 @@ class TranslatorApp(ctk.CTk):
                 self.translate_action_btn.configure(state="normal")
                 self.status_left.configure(text=self.gt("sent_status_ready"))
 
-            self.after(0, _update_ui)
+            try:
+                self.after(0, _update_ui)
+            except RuntimeError:
+                pass
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1887,6 +1960,9 @@ class TranslatorApp(ctk.CTk):
         if not query:
             self.clear_results()
             return
+        if len(query) > 512 or "\x00" in query:
+            self.status_left.configure(text="Input is limited to 512 characters.")
+            return
 
         sel_mode = self.dir_selector.get()
         if sel_mode in ("EN ➔ TR", "İngilizce ➔ Türkçe"):
@@ -1953,32 +2029,11 @@ class TranslatorApp(ctk.CTk):
             return
 
         source, wtype, category, target = values
-        detail_lines = [f"【{source}】 ➔ {target} ({wtype} - {category})", ""]
-        
-        tdk_defs = self.db.get_tr_definitions(source)
-        if not tdk_defs:
-            tdk_defs = self.db.get_tr_definitions(target)
-
-        if tdk_defs:
-            detail_lines.append("📖 TDK Güncel Türkçe Sözlük Tanımı:")
-            for i, d in enumerate(tdk_defs[:3], 1):
-                detail_lines.append(f"  {i}. {d['meaning']}")
-                if d.get("example"):
-                    author = f" ({d['author']})" if d.get("author") else ""
-                    detail_lines.append(f"     \"{d['example']}\"{author}")
-            detail_lines.append("")
-
-        webster_def = self.db.get_en_definition(source)
-        if not webster_def:
-            webster_def = self.db.get_en_definition(target)
-
-        if webster_def:
-            detail_lines.append("📘 Webster's English Dictionary:")
-            detail_lines.append(f"  {webster_def.strip()}")
-
-        if not tdk_defs and not webster_def:
-            detail_lines.append("Detaylı sözlük açıklaması bulunamadı; çeviri karşılıkları yukarıdaki listede yer almaktadır.")
-
+        detail_lines = [
+            f"【{source}】 ➔ {target} ({wtype} - {category})",
+            "",
+            "Detailed bilingual alternatives are available in the results list.",
+        ]
         self.set_detail_text("\n".join(detail_lines))
 
     def set_detail_text(self, text: str):
@@ -2020,7 +2075,7 @@ class TranslatorApp(ctk.CTk):
         # 2. Header & Window Title
         is_tr = self.settings.get("language", "tr") == "tr"
         badge_txt = "Açık Kaynak (BETA)" if is_tr else "Open Source (BETA)"
-        self.title(f"LocalDictionary v1.41 - {badge_txt}")
+        self.title(f"LocalDictionary v{APP_VERSION} - {badge_txt}")
         self.title_label.configure(text=self.gt("app_title"))
         self.sub_label.configure(text=self.gt("app_subtitle"))
         self.settings_btn.configure(text=self.gt("settings_btn"))
@@ -2088,6 +2143,17 @@ class TranslatorApp(ctk.CTk):
             self.tray.update_language()
 
     def destroy(self):
+        # CustomTkinter schedules several DPI/window callbacks. Cancel them
+        # before destroying the Tcl interpreter so shutdown cannot emit
+        # "invalid command name" errors.
+        try:
+            for callback_id in self.tk.call("after", "info"):
+                try:
+                    self.after_cancel(callback_id)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         if hasattr(self, "debounce_timer") and self.debounce_timer:
             try:
                 self.after_cancel(self.debounce_timer)
@@ -2102,7 +2168,12 @@ class TranslatorApp(ctk.CTk):
         if hasattr(self, "syntax_translator") and self.syntax_translator:
             if hasattr(self.syntax_translator, "conn") and self.syntax_translator.conn:
                 self.syntax_translator.conn.close()
-        super().destroy()
+        try:
+            super().destroy()
+        except tk.TclError:
+            # CustomTkinter may already have torn down a child Tcl command
+            # while scheduled DPI callbacks are being cancelled.
+            pass
 
 
 def run_app():

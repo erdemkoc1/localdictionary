@@ -1,91 +1,94 @@
-# LocalDictionary (TR ⇄ EN) v1.41 (BETA)
+# LocalDictionary (TR ⇄ EN) v1.42.0-beta.1
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6.svg)](https://www.microsoft.com/windows)
-[![Offline: 100%](https://img.shields.io/badge/Privacy-100%25%20Offline-green.svg)](#gizlilik-ve-guvenlik)
+**LocalDictionary**, Türkçe ve İngilizce arasında çalışan, gizlilik odaklı,
+tamamen yerel bir masaüstü sözlük ve nöral çeviri uygulamasıdır.
 
-**LocalDictionary**, Türkçe ve İngilizce dilleri arasında çift yönlü çalışan, **%100 çevrimdışı, açık kaynaklı, gizlilik odaklı hibrit sözlük ve nöral cümle çevirisi masaüstü uygulamasıdır**.
+> **BETA:** Bu sürüm geliştirme ve geri bildirim içindir. Kurulum gerektirmeyen
+> Windows paketi GitHub Releases üzerinden dağıtılacaktır.
 
-Hiçbir bulut servisine, harici API'ye veya internet bağlantısına ihtiyaç duymaz. Tüm sözlük aramaları ve yapay zeka çevirileri tamamen yerel donanımınızda (CPU) çalışır.
+## Özellikler
 
----
+- Indexed SQLite bilingual sözlük ve morfolojik arama
+- Yerel CTranslate2 + SentencePiece nöral çeviri
+- Kural tabanlı sözdizimi fallback'i
+- Deyim/atasözü eşleştirme
+- Yazım önerileri
+- Kullanıcı düzeltmeleri, glossary ve çeviri önbelleği
+- Türkçe/İngilizce arayüz
+- Windows tray, Ctrl+sağ tık ve seçim çevirisi (kullanıcı açıkça etkinleştirirse)
 
-## 🌟 Temel Özellikler
+## Gizlilik ve ağ davranışı
 
-### 1. 2.2M+ Kayıtlı Derin Sözlük & Çok Anlamlılık (Polysemy)
-* **1.68M+ Çift Yönlü Kayıt:** 263.000+ tekil İngilizce kök ve 888.000+ tekil Türkçe kök kelime.
-* **CEFR A1–C2 Seviye Etiketleme:** 260.000'den fazla kayıt CEFR (A1, A2, B1, B2, C1, C2) ve Academic Word List (AWL) seviyelerine göre etiketlenmiştir.
-* **Akıllı Sıralama (Re-Ranking):** Kelimelerin onlarca anlamı arasından birincil ve en yaygın olanları daima ilk sıralarda sunulur.
-* **TDK & Webster Monolingual Sözlükler:** 133.000+ TDK Güncel Türkçe Sözlük tanımı ve 102.000+ Webster İngilizce tanımı dahildir.
-* **Alt-milisaniye Arama Hızı:** SQLite WAL (Write-Ahead Logging) indeksi ile anlık (~0.8 ms) arama performansı.
+- Runtime'da bulut API, telemetri, güncelleme istemcisi veya uzak paket
+  indeksi yoktur.
+- NMT modelleri EXE'nin yanındaki `data/models` klasöründen yerel olarak
+  okunur.
+- Uygulama açılış veya çeviri sırasında internet bağlantısı açmaz; runtime
+  ayrıca Python seviyesinde socket/ DNS bağlantılarını process içinde bloke
+  eder.
+- Geliştirici veri indirme scriptleri ağ kullanabilir; bunlar uygulama
+  runtime'ının parçası değildir ve release paketine dahil edilmez.
+- Ayarlar, geçmiş, öğrenilen düzeltmeler, glossary ve cache varsayılan olarak
+  `%LOCALAPPDATA%\LocalDictionary` altında saklanır. OneDrive'a taşınabilir
+  klasörde çalıştırılsanız bile bu dosyalar EXE yanında oluşturulmaz.
 
-### 2. Hibrit Çeviri Motoru (Yerel AI + Kural Tabanlı Sistem)
-* **CTranslate2 NMT:** Argos Translate / Opus-MT modelleri INT8 kuantizasyonu ile yerel CPU üzerinde hızlı çalışır.
-* **Deyimler ve Atasözleri Motoru:** Binlerce Türkçe ve İngilizce kalıplaşmış deyimi ve atasözünü birebir çeviri hatasına düşmeden doğal karşılıklarıyla aktarır.
-* **Cümle Ayrıştırma (Clause Splitting):** Uzun ve karmaşık bileşik cümleleri mantıksal yan tümcelere bölerek çeviri başarısını artırır.
-* **Dinamik Güven Skoru:** Her çeviride yeşil (%80+ yüksek), sarı (%55-79 orta) ve kırmızı (düşük güven uyarısı) göstergeleri sunar.
+## İlk kullanım ve tercihler
 
-### 3. İnsan Odaklı Öğrenme ve Özel Sözlük (Human-in-the-Loop)
-* **"Doğrusunu Öğret":** Beğenilmeyen veya geliştirilmek istenen bir çevirinin doğrusu tek tuşla sisteme öğretilir; sistem sonraki sorgularda bu öğrenilen çeviriyi anında önceliklendirir.
-* **Özel Terim Sözlüğü (Glossary):** Çevirilerde zorunlu olarak kullanılmasını istediğiniz terim eşleştirmelerini tanımlayabilirsiniz.
+- İlk açılış dili **İngilizce**dir.
+- Kullanıcı Türkçe'yi seçtiğinde seçim kalıcı olarak saklanır ve sonraki
+  açılışlarda korunur.
+- Global quick translate özellikleri, Windows context menu ve otomatik
+  başlangıç ilk kullanımda **kapalıdır**.
+- Kullanıcı bir özelliği açtığında ayar `settings.json` içinde kalıcı olur ve
+  uygulama yeniden açıldığında aynı tercih geri yüklenir.
+- Uygulama veritabanı ve modelleri salt okunur kaynaklardır; kullanıcı
+  değişiklikleri bu kaynakların üzerine yazılmaz.
 
-### 4. Windows Entegrasyonu ve Hızlı Çeviri
-* **Ctrl + Sağ Tık Hızlı Çeviri:** Herhangi bir programda (tarayıcı, PDF, Word vb.) seçili metin üzerinde `Ctrl + Sağ Tık` yapıldığında anında çeviri kartı açılır.
-* **Özelleştirilebilir Seçim & Çift Tık Çevirisi:** Metin fareyle sürüklendiğinde veya kelimeye çift tıklandığında beliren çeviri butonları ayarlardan isteğe bağlı olarak kolayca açılıp kapatılabilir.
-* **Sistem Tepsisi (System Tray):** Pencere simge durumuna alındığında arka planda sessizce hazır bekler.
-* **Açık / Koyu Tema & Dil Desteği:** Türkçe ve İngilizce arayüz, koyu (Dark) ve açık (Light) tema seçenekleri.
+## Kaynak koddan çalıştırma
 
----
-
-## 🔒 Gizlilik ve Güvenlik (Privacy-First)
-
-* **Sıfır Bulut Bağımlılığı:** API anahtarı, sunucu hesabı veya harici bağlantı kesinlikle bulunmaz.
-* **Sıfır Telemetri:** Hiçbir veri, metin veya kullanım istatistiği dışarıya aktarılmaz; tüm veritabanları yerel diskinizde saklanır.
-* **Açık Kaynak Kod:** Tüm kodlar incelenebilir, değiştirilebilir ve yerel olarak derlenebilir.
-
----
-
-## 🚀 Kurulum ve Çalıştırma
-
-### Gereksinimler
-* Python 3.10 veya üzeri
-* Windows 10 / 11 (64-bit)
-
-### Kaynak Koddan Çalıştırma
-```bash
-# Depoyu klonlayın
-git clone https://github.com/kullanici-adi/localdictionary.git
-cd localdictionary
-
-# Bağımlılıkları yükleyin
-pip install -r requirements.txt
-
-# Uygulamayı başlatın
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-### Taşınabilir Windows (.exe) Derleme
-Kurulum gerektirmeyen tek parça taşınabilir Windows klasörü oluşturmak için:
-```bash
+İlk kaynak klonunda küçük bir starter dictionary oluşturulur. Tam veritabanı
+ve NMT modelleri release paketinde bulunur; modeller yoksa uygulama kural
+tabanlı fallback ile çalışmaya devam eder.
+
+## Testler
+
+```powershell
+python -B -m unittest discover -s tests -v
+```
+
+Testler geçici veri dizinlerini kullanır; gerçek Windows Registry'yi,
+kullanıcı geçmişini veya settings dosyasını değiştirmez.
+
+## Windows paketi
+
+```powershell
+python -m pip install -r requirements-dev.txt
 python build_exe.py
 ```
-Derleme tamamlandığında `dist/localdictionary/localdictionary.exe` dosyası hazır hale gelir.
 
----
+Çıktı:
 
-## 🧪 Testleri Çalıştırma
+- `dist/localdictionary/`
+- `dist/LocalDictionary-v1.42.0-beta.1-win64.zip`
+- `SHA256SUMS.txt`
+- `RELEASE_MANIFEST.json`
 
-Tüm birim ve entegrasyon testlerini çalıştırmak için:
-```bash
-python -m unittest tests/test_translator.py tests/test_syntax.py tests/test_db.py
-```
+Build scripti Desktop'a otomatik kopyalamaz, çalışan uygulamayı zorla
+kapatmaz ve kullanıcı verilerini paketlemez. EXE imzasızdır; yayınlamadan
+önce `SHA256SUMS.txt` değerlerini doğrulayın.
 
----
+## Lisans ve kaynaklar
 
-## 📄 Lisans ve Kaynaklar
+Kod: MIT (bkz. `LICENSE`).
 
-Bu proje [MIT Lisansı](LICENSE) altında dağıtılmaktadır.
-
-* **Çeviri Modelleri:** [Argos Translate](https://github.com/argosopentech/argos-translate) / [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) (MIT & CC-BY-4.0)
-* **Sözlük Verileri:** Kaikki Wiktionary (CC-BY-SA 3.0), FreeDict (GPL), Academic Word List (AWL), TDK & Webster kamuya açık kaynakları.
+Sözlük verileri ve modeller ayrı lisanslara tabidir; tamamen MIT kapsamında
+değildir. `DATA_LICENSES.md` ve `THIRD_PARTY_NOTICES.md` dosyaları release
+paketine dahil edilir. TDK veya yeniden dağıtım izni belgelenmeyen sözlük
+verisi public release veritabanına dahil edilmez.

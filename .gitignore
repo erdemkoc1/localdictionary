@@ -17,6 +17,14 @@ data/*.json
 data/models/
 data/tdk_v12.sqlite3.db
 
+# Local/runtime secrets and generated data
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+
 # Virtual environments
 venv/
 .venv/

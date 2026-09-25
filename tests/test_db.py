@@ -48,17 +48,13 @@ class TestDictionaryDB(unittest.TestCase):
         self.assertTrue(any("river" in t.lower() for t in targets))
         print(f"[TEST] Turkish char search 'ırmak': {len(results)} results in {elapsed:.2f} ms")
 
-    def test_tdk_definitions(self):
-        defs = self.db.get_tr_definitions("dilmaç")
-        self.assertGreater(len(defs), 0)
-        self.assertTrue("çevirmen" in defs[0]["meaning"])
-        print(f"[TEST] TDK definition 'dilmaç': {defs[0]['meaning']}")
+    def test_no_restricted_source_rows(self):
+        self.db.cur.execute("SELECT COUNT(*) FROM bilingual WHERE category LIKE '%TDK%'")
+        self.assertEqual(self.db.cur.fetchone()[0], 0)
 
-    def test_webster_definition(self):
-        defn = self.db.get_en_definition("courage")
-        self.assertIsNotNone(defn)
-        self.assertTrue("heart" in defn.lower())
-        print(f"[TEST] Webster definition 'courage': {defn[:80]}...")
+    def test_database_metadata_exists(self):
+        self.db.cur.execute("SELECT value FROM db_metadata WHERE key = 'restricted_source_data_removed'")
+        self.assertEqual(self.db.cur.fetchone()[0], "1")
 
 if __name__ == "__main__":
     unittest.main()

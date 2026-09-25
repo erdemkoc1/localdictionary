@@ -1,10 +1,22 @@
 import os
-import sys
 import json
 import hashlib
 import sqlite3
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
+from src.paths import migrate_legacy_user_file
 from src.utils import turkish_lower
+
+MAX_TRANSLATION_CHARS = 20_000
+MAX_GLOSSARY_TERM_CHARS = 512
+MAX_CACHE_ROWS = 5_000
+
+
+def normalize_user_text(text: str, language: str = "") -> str:
+    """Normalize cache keys with language-aware, case-insensitive rules."""
+    compact = " ".join(text.split())
+    if language == "tr":
+        return turkish_lower(compact)
+    return compact.casefold()
 
 
 class UserDataManager:
@@ -16,14 +28,10 @@ class UserDataManager:
     """
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
-            if getattr(sys, "frozen", False):
-                exe_dir = os.path.dirname(sys.executable)
-                db_path = os.path.join(exe_dir, "user_data.db")
-            else:
-                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-                data_dir = os.path.join(base_dir, "data")
-                os.makedirs(data_dir, exist_ok=True)
-                db_path = os.path.join(data_dir, "user_data.db")
+            db_path = str(migrate_legacy_user_file("user_data.db"))
+        else:
+            parent = os.path.dirname(os.path.abspath(db_path))
+            os.makedirs(parent, exist_ok=True)
 
         self.db_path = db_path
         self._init_db()
@@ -31,6 +39,8 @@ class UserDataManager:
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=10.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
         return conn
 
     def _init_db(self):
@@ -88,7 +98,7 @@ class UserDataManager:
 
     @staticmethod
     def _compute_cache_key(text: str, from_code: str, to_code: str, show_slang: bool) -> str:
-        norm = " ".join(turkish_lower(text).split())
+        norm = normalize_user_text(text, from_code)
         raw = f"{norm}|{from_code}|{to_code}|{1 if show_slang else 0}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -117,8 +127,10 @@ class UserDataManager:
         breakdown = []
         if row["breakdown_json"]:
             try:
-                breakdown = json.loads(row["breakdown_json"])
-            except Exception:
+                candidate = json.loads(row["breakdown_json"])
+                if isinstance(candidate, list):
+                    breakdown = [item for item in candidate if isinstance(item, dict)]
+            except (TypeError, ValueError, json.JSONDecodeError):
                 breakdown = []
 
         return {
@@ -143,20 +155,25 @@ class UserDataManager:
         **kwargs
     ):
         """Stores a translation result in cache."""
-        txt = (kwargs.get("source_text") or text).strip()
+        txt = (kwargs.get("source_text") or text).strip()[:MAX_TRANSLATION_CHARS]
         f_code = kwargs.get("from_code") or kwargs.get("from_lang") or from_code
         t_code = kwargs.get("to_code") or kwargs.get("to_lang") or to_code
-        trans = (kwargs.get("translated_text") or translated_text).strip()
-        b_down = kwargs.get("breakdown") if "breakdown" in kwargs else (breakdown or [])
-        conf = kwargs.get("confidence", confidence)
-        eng = kwargs.get("engine", engine)
-        slang = kwargs.get("show_slang", show_slang)
+        trans = (kwargs.get("translated_text") or translated_text).strip()[:MAX_TRANSLATION_CHARS]
+        raw_breakdown = kwargs.get("breakdown") if "breakdown" in kwargs else breakdown
+        b_down = raw_breakdown if isinstance(raw_breakdown, list) else []
+        b_down = [item for item in b_down if isinstance(item, dict)]
+        try:
+            conf = max(0, min(int(kwargs.get("confidence", confidence)), 100))
+        except (TypeError, ValueError):
+            conf = 80
+        eng = str(kwargs.get("engine", engine))[:64]
+        slang = bool(kwargs.get("show_slang", show_slang))
 
-        if not txt or not trans:
+        if not txt or not trans or "\x00" in txt or "\x00" in trans:
             return
 
         key = self._compute_cache_key(txt, f_code, t_code, slang)
-        b_json = json.dumps(b_down, ensure_ascii=False) if b_down else "[]"
+        b_json = json.dumps(b_down, ensure_ascii=False)
 
         conn = self._get_connection()
         cur = conn.cursor()
@@ -172,6 +189,13 @@ class UserDataManager:
                 engine = excluded.engine,
                 created_at = CURRENT_TIMESTAMP;
         """, (key, txt, f_code, t_code, trans, b_json, conf, eng, 1 if slang else 0))
+        cur.execute("""
+            DELETE FROM translation_cache
+            WHERE cache_key NOT IN (
+                SELECT cache_key FROM translation_cache
+                ORDER BY created_at DESC, rowid DESC LIMIT ?
+            )
+        """, (MAX_CACHE_ROWS,))
         conn.commit()
         conn.close()
 
@@ -190,7 +214,7 @@ class UserDataManager:
         """Checks if the user has manually corrected this input before."""
         f_code = kwargs.get("from_code") or kwargs.get("from_lang") or from_code
         t_code = kwargs.get("to_code") or kwargs.get("to_lang") or to_code
-        norm = " ".join(turkish_lower(text).split())
+        norm = normalize_user_text(text, f_code)
         conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("""
@@ -214,14 +238,14 @@ class UserDataManager:
         Saves user's manual correction for a sentence or phrase.
         Also updates translation_cache with highest confidence (100%).
         """
-        clean_input = (kwargs.get("source_text") or text).strip()
-        clean_corr = (kwargs.get("corrected_text") or corrected_text).strip()
+        clean_input = (kwargs.get("source_text") or text).strip()[:MAX_TRANSLATION_CHARS]
+        clean_corr = (kwargs.get("corrected_text") or corrected_text).strip()[:MAX_TRANSLATION_CHARS]
         f_code = kwargs.get("from_code") or kwargs.get("from_lang") or from_code
         t_code = kwargs.get("to_code") or kwargs.get("to_lang") or to_code
-        if not clean_input or not clean_corr:
+        if not clean_input or not clean_corr or "\x00" in clean_input or "\x00" in clean_corr:
             return
 
-        norm = " ".join(turkish_lower(clean_input).split())
+        norm = normalize_user_text(clean_input, f_code)
 
         conn = self._get_connection()
         cur = conn.cursor()
@@ -259,10 +283,21 @@ class UserDataManager:
 
     def delete_correction(self, correction_id: int):
         conn = self._get_connection()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM user_corrections WHERE id = ?;", (correction_id,))
-        conn.commit()
-        conn.close()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT original_input, from_code, to_code
+                FROM user_corrections WHERE id = ?
+            """, (correction_id,))
+            row = cur.fetchone()
+            if row:
+                for show_slang in (False, True):
+                    key = self._compute_cache_key(row[0], row[1], row[2], show_slang)
+                    cur.execute("DELETE FROM translation_cache WHERE cache_key = ?", (key,))
+                cur.execute("DELETE FROM user_corrections WHERE id = ?", (correction_id,))
+            conn.commit()
+        finally:
+            conn.close()
 
     # =========================================================================
     # 3. USER GLOSSARY METHODS (Custom Terminology)
@@ -297,10 +332,12 @@ class UserDataManager:
         notes: str = ""
     ) -> int:
         """Adds or updates a custom term in user glossary. Returns inserted row ID."""
-        src = source_term.strip()
-        tgt = target_term.strip()
-        if not src or not tgt:
+        src = source_term.strip()[:MAX_GLOSSARY_TERM_CHARS]
+        tgt = target_term.strip()[:MAX_GLOSSARY_TERM_CHARS]
+        if not src or not tgt or "\x00" in src or "\x00" in tgt:
             return 0
+        if lang_pair not in {"any", "en_tr", "tr_en", "auto_auto"}:
+            lang_pair = "any"
 
         conn = self._get_connection()
         cur = conn.cursor()
@@ -337,13 +374,25 @@ class UserDataManager:
             return text
 
         import re
-        result = text
+        result = text[:MAX_TRANSLATION_CHARS]
         for t in terms:
             src = t["source_term"]
             tgt = t["target_term"]
             is_case = bool(t.get("case_sensitive", False))
             flags = 0 if is_case else re.IGNORECASE
             pattern = r"\b" + re.escape(src) + r"\b"
-            result = re.sub(pattern, tgt, result, flags=flags)
+            result = re.sub(pattern, lambda _match, replacement=tgt: replacement, result, flags=flags)
 
         return result
+
+    def clear_all_user_data(self):
+        """Delete corrections, glossary terms, and cached translations."""
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM translation_cache;")
+            cur.execute("DELETE FROM user_corrections;")
+            cur.execute("DELETE FROM user_glossary;")
+            conn.commit()
+        finally:
+            conn.close()

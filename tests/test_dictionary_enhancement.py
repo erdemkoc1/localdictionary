@@ -47,10 +47,10 @@ class TestDictionaryEnhancement(unittest.TestCase):
             self.assertTrue(matched, f"None of keywords {expected_keywords} found in {all_targets}")
 
     def test_fallbacks(self):
-        # TDK fallback test for rare word
-        res, ms, d = self.db.search("acube")
+        # Common bilingual entry remains available without monolingual data.
+        res, ms, d = self.db.search("computer", mode="en_tr")
         self.assertGreater(len(res), 0)
-        self.assertIn("Tuhaf", res[0]["target"])
+        self.assertIn("bilgisayar", res[0]["target"].lower())
 
         # Morphological analysis test for complex suffix
         res, ms, d = self.db.search("aradıysam")

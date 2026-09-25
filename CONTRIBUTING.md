@@ -19,8 +19,8 @@ Thank you for your interest in contributing to **LocalDictionary**!
    ```
 2. Install dependencies and run tests locally before pushing:
    ```bash
-   pip install -r requirements.txt
-   python -m unittest tests/test_translator.py tests/test_syntax.py tests/test_settings_and_ui.py
+   pip install -r requirements-dev.txt
+   python -B -m unittest discover -s tests -v
    ```
 3. Commit your changes with clear, descriptive commit messages.
 4. Push to your branch and submit a Pull Request to `master`.

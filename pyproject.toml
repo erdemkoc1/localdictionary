@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localdictionary"
+version = "1.42.0b1"
+description = "Private, fully offline Turkish-English dictionary and translation application"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = {file = "LICENSE"}
+authors = [{name = "LocalDictionary Contributors"}]
+dependencies = [
+  "customtkinter==6.0.0",
+  "darkdetect==0.8.0",
+  "pillow==12.3.0",
+  "pystray==0.19.5",
+  "ctranslate2==4.8.2",
+  "sentencepiece==0.2.2",
+]
+
+[tool.setuptools]
+packages = ["src"]
