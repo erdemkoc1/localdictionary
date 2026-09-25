@@ -5,20 +5,27 @@ from typing import Optional, Callable
 from PIL import Image, ImageDraw, ImageFont
 import pystray
 
+from src.utils import get_resource_path
+
+
 def create_tray_image(width=64, height=64) -> Image.Image:
-    """Generates a modern, clean tray icon with dark-blue background and LD logo."""
+    """Return the shared blue LD mark, with a small drawing fallback."""
+    try:
+        asset_path = get_resource_path(os.path.join("assets", "localdictionary.png"))
+        if os.path.isfile(asset_path):
+            with Image.open(asset_path) as source:
+                return source.convert("RGBA").resize((width, height), Image.Resampling.LANCZOS)
+    except Exception:
+        pass
+
+    # Keep the tray usable even if a user removes the optional asset.
     img = Image.new("RGBA", (width, height), color=(0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    # Background rounded rectangle
-    draw.rounded_rectangle([2, 2, width - 3, height - 3], radius=14, fill="#1F538D", outline="#4A90E2", width=2)
-
-    # Draw "LD" letters cleanly
+    draw.rounded_rectangle([2, 2, width - 3, height - 3], radius=14, fill="#075BDE", outline="#63C7FF", width=2)
     try:
-        font = ImageFont.truetype("arial.ttf", 26)
+        font = ImageFont.truetype("arialbd.ttf", 26)
     except Exception:
         font = ImageFont.load_default()
-
     draw.text((12, 14), "LD", fill="white", font=font)
     return img
 
