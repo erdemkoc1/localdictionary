@@ -55,6 +55,17 @@ class TestSentenceTranslator(unittest.TestCase):
             print(f"\n[COMPLEX NMT EN->TR]\nIN : {sentence}\nOUT: {res}")
 
 
+    def test_clause_connectors_do_not_leak_english_function_words(self):
+        text = (
+            "Although the empirical evidence seemed conclusive at first glance, "
+            "the researchers hesitated to publish their findings until the anomalies "
+            "were systematically eliminated."
+        )
+        result = self.translator.translate(text, "en", "tr").translated_text
+        self.assertNotIn(" the ", f" {result.lower()} ")
+        self.assertNotIn(" she ", f" {result.lower()} ")
+        self.assertNotIn(" they ", f" {result.lower()} ")
+
     def test_multisentence_slang_hybrid(self):
         text = "Benimle denk değilsin. Beni kimse sokak kavgasında yenemez. sikeyim seni."
         res = self.translator.translate(text, "tr", "en", show_slang_profanity=True)
