@@ -11,6 +11,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -88,6 +89,20 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _git_commit() -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=BASE_DIR,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+        check=False,
+    )
+    commit = result.stdout.strip()
+    return commit if re.fullmatch(r"[0-9a-f]{40}", commit) else None
+
+
 def _write_source_manifest() -> Path:
     source_assets = [BASE_DIR / "data" / "dictionary.db"]
     source_assets.extend(path for path in (BASE_DIR / "data" / "models").rglob("*") if path.is_file())
@@ -96,6 +111,7 @@ def _write_source_manifest() -> Path:
     payload = {
         "application": APP_NAME,
         "version": APP_VERSION,
+        "source_commit": _git_commit(),
         "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
         "network_policy": "runtime has no network client or remote model/package index",
         "user_data_policy": "mutable data is excluded; runtime data belongs under LOCALAPPDATA",
