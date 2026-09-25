@@ -89,6 +89,6 @@ kapatmaz ve kullanıcı verilerini paketlemez. EXE imzasızdır; yayınlamadan
 Kod: MIT (bkz. `LICENSE`).
 
 Sözlük verileri ve modeller ayrı lisanslara tabidir; tamamen MIT kapsamında
-değildir. `DATA_LICENSES.md` ve `THIRD_PARTY_NOTICES.md` dosyaları release
+değildir. `DATA_LICENSES.md`, `THIRD_PARTY_NOTICES.md` ve `LICENSES/` dizini release
 paketine dahil edilir. TDK veya yeniden dağıtım izni belgelenmeyen sözlük
 verisi public release veritabanına dahil edilmez.

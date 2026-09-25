@@ -39,6 +39,9 @@ def _validate_assets() -> None:
         BASE_DIR / "data" / "dictionary.db",
         BASE_DIR / "data" / "models" / "translate-tr_en-1_5" / "model",
         BASE_DIR / "data" / "models" / "translate-en_tr-1_5" / "model",
+        BASE_DIR / "LICENSES" / "README.md",
+        BASE_DIR / "LICENSES" / "GPL-2.0-FreeDict.txt",
+        BASE_DIR / "LICENSES" / "CC-BY-SA-4.0.txt",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -72,6 +75,10 @@ def _copy_release_assets() -> None:
         if source.is_file():
             shutil.copy2(source, APP_DIR / filename)
 
+    source_licenses = BASE_DIR / "LICENSES"
+    if source_licenses.is_dir():
+        shutil.copytree(source_licenses, APP_DIR / "LICENSES", dirs_exist_ok=True)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -84,6 +91,7 @@ def _sha256(path: Path) -> str:
 def _write_source_manifest() -> Path:
     source_assets = [BASE_DIR / "data" / "dictionary.db"]
     source_assets.extend(path for path in (BASE_DIR / "data" / "models").rglob("*") if path.is_file())
+    source_assets.extend(path for path in (BASE_DIR / "LICENSES").rglob("*") if path.is_file())
     manifest = APP_DIR / "RELEASE_MANIFEST.json"
     payload = {
         "application": APP_NAME,
@@ -124,7 +132,8 @@ def _write_release_readme() -> None:
         "This build performs dictionary lookup and neural translation locally.\n"
         "It contains no telemetry, cloud API client, update client, or network feature.\n\n"
         "Run localdictionary.exe to start the application.\n"
-        "SHA256SUMS.txt contains integrity hashes for every packaged file.\n\n"
+        "SHA256SUMS.txt contains integrity hashes for every packaged file.\n"
+        "Third-party and data/model license texts are in LICENSES/ and DATA_LICENSES.md.\n\n"
         "This EXE is not code-signed. Verify its SHA-256 hash before running it.\n"
     )
     (APP_DIR / "RELEASE_README.txt").write_text(text, encoding="utf-8", newline="\n")
