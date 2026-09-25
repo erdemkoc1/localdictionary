@@ -9,7 +9,7 @@
 
 ## Reporting a Vulnerability
 
-Security is a high priority for this project. The application runtime is designed to operate with zero network traffic. Security risks therefore typically concern local file handling, input processing, Windows integrations, and bundled executable integrity.
+Security is a high priority for this project. Please report vulnerabilities privately and include clear reproduction steps.
 
 If you discover a security vulnerability or privacy concern:
 1. Please **do not** open a public issue describing the vulnerability.

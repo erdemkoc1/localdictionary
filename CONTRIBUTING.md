@@ -28,4 +28,4 @@ Thank you for your interest in contributing to **LocalDictionary**!
 ## Code Style & Guidelines
 - Follow standard Python PEP 8 formatting.
 - Ensure all new features include corresponding test cases in `tests/`.
-- Maintain 100% offline functionality: **No external cloud APIs or online network requirements** in runtime code.
+- Keep changes focused and include tests with new behavior.
