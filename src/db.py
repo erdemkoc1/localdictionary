@@ -10,6 +10,88 @@ TR_CHARS = set("çğıöşüÇĞİÖŞÜ")
 MAX_QUERY_CHARS = 512
 MAX_SEARCH_RESULTS = 500
 
+# These are static SQL templates. User input is supplied only through bound
+# parameters; column names are never interpolated from request data.
+_SEARCH_SQL_EN = """
+WITH candidates AS (
+    SELECT en, tr, type, category, en_lower AS source_lower
+    FROM bilingual
+    WHERE en_lower >= ? AND en_lower < ?
+      AND (? = 1 OR category NOT IN ('Argo / Sokak Dili', 'Slang', 'Argo'))
+)
+SELECT en, tr, type, category, source_lower
+FROM candidates
+ORDER BY
+    CASE WHEN source_lower = ? THEN 0 ELSE 1 END,
+    CASE
+        WHEN category = 'Primary' THEN -3
+        WHEN category = 'Idioms & Proverbs' THEN -2
+        WHEN category = 'Common Usage' THEN -1
+        WHEN category = 'CEFR A1' THEN 0
+        WHEN category = 'CEFR A2' THEN 1
+        WHEN category = 'CEFR B1' THEN 2
+        WHEN category = 'CEFR B2' THEN 3
+        WHEN category = 'CEFR C1' THEN 4
+        WHEN category = 'CEFR C2' THEN 5
+        WHEN category LIKE 'CEFR%' THEN 5
+        WHEN category = 'Formal' THEN 6
+        WHEN category = 'Temel Çekim' THEN 7
+        WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
+        WHEN category = 'İngilizce Derecelendirme' THEN 9
+        WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
+        WHEN category = 'Curated Idioms' THEN 11
+        WHEN category = 'Idioms' THEN 11
+        WHEN category = 'Proverb' THEN 11
+        WHEN category = 'Wiktionary' THEN 12
+        WHEN category = 'Wiktionary / Çekim' THEN 13
+        WHEN category = 'FreeDict' THEN 14
+        WHEN category = 'General' THEN 15
+        ELSE 16
+    END,
+    length(source_lower) ASC
+LIMIT ?;
+"""
+
+_SEARCH_SQL_TR = """
+WITH candidates AS (
+    SELECT en, tr, type, category, tr_lower AS source_lower
+    FROM bilingual
+    WHERE tr_lower >= ? AND tr_lower < ?
+      AND (? = 1 OR category NOT IN ('Argo / Sokak Dili', 'Slang', 'Argo'))
+)
+SELECT en, tr, type, category, source_lower
+FROM candidates
+ORDER BY
+    CASE WHEN source_lower = ? THEN 0 ELSE 1 END,
+    CASE
+        WHEN category = 'Primary' THEN -3
+        WHEN category = 'Idioms & Proverbs' THEN -2
+        WHEN category = 'Common Usage' THEN -1
+        WHEN category = 'CEFR A1' THEN 0
+        WHEN category = 'CEFR A2' THEN 1
+        WHEN category = 'CEFR B1' THEN 2
+        WHEN category = 'CEFR B2' THEN 3
+        WHEN category = 'CEFR C1' THEN 4
+        WHEN category = 'CEFR C2' THEN 5
+        WHEN category LIKE 'CEFR%' THEN 5
+        WHEN category = 'Formal' THEN 6
+        WHEN category = 'Temel Çekim' THEN 7
+        WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
+        WHEN category = 'İngilizce Derecelendirme' THEN 9
+        WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
+        WHEN category = 'Curated Idioms' THEN 11
+        WHEN category = 'Idioms' THEN 11
+        WHEN category = 'Proverb' THEN 11
+        WHEN category = 'Wiktionary' THEN 12
+        WHEN category = 'Wiktionary / Çekim' THEN 13
+        WHEN category = 'FreeDict' THEN 14
+        WHEN category = 'General' THEN 15
+        ELSE 16
+    END,
+    length(source_lower) ASC
+LIMIT ?;
+"""
+
 EN_IRREGULAR_LEMMAS = {
     "went": "go", "gone": "go", "goes": "go", "going": "go",
     "saw": "see", "seen": "see", "sees": "see", "seeing": "see",
@@ -323,95 +405,25 @@ class DictionaryDB:
             direction = "en_tr" if lang == "en" else "tr_en"
 
         is_en = (direction == "en_tr")
-        src_col = "en_lower" if is_en else "tr_lower"
         upper_bound = q_lower + "\uffff"
+        show_slang = 1 if show_slang_profanity else 0
 
-        slang_filter = "" if show_slang_profanity else "AND category NOT IN ('Argo / Sokak Dili', 'Slang', 'Argo')"
-
-        # Query using B-Tree range & exact matching with prioritized sorting
-        sql = f"""
-        SELECT en, tr, type, category, {src_col}
-        FROM bilingual
-        WHERE {src_col} >= ? AND {src_col} < ? {slang_filter}
-        ORDER BY 
-            CASE WHEN {src_col} = ? THEN 0 ELSE 1 END,
-            CASE 
-                WHEN category = 'Primary' THEN -3
-                WHEN category = 'Idioms & Proverbs' THEN -2
-                WHEN category = 'Common Usage' THEN -1
-                WHEN category = 'CEFR A1' THEN 0
-                WHEN category = 'CEFR A2' THEN 1
-                WHEN category = 'CEFR B1' THEN 2
-                WHEN category = 'CEFR B2' THEN 3
-                WHEN category = 'CEFR C1' THEN 4
-                WHEN category = 'CEFR C2' THEN 5
-                WHEN category LIKE 'CEFR%' THEN 5
-                WHEN category = 'Formal' THEN 6
-                WHEN category = 'Temel Çekim' THEN 7
-                WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
-                WHEN category = 'İngilizce Derecelendirme' THEN 9
-                WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
-                WHEN category = 'Curated Idioms' THEN 11
-                WHEN category = 'Idioms' THEN 11
-                WHEN category = 'Proverb' THEN 11
-                WHEN category = 'Wiktionary' THEN 12
-                WHEN category = 'Wiktionary / Çekim' THEN 13
-                WHEN category = 'FreeDict' THEN 14
-                WHEN category = 'General' THEN 15
-                ELSE 16
-            END,
-            length({src_col}) ASC
-        LIMIT ?;
-        """
-
-        self.cur.execute(sql, (q_lower, upper_bound, q_lower, limit))
+        # Both templates are static; q_lower, upper_bound, show_slang and
+        # limit are always bound parameters.
+        sql = _SEARCH_SQL_EN if is_en else _SEARCH_SQL_TR
+        self.cur.execute(sql, (q_lower, upper_bound, show_slang, q_lower, limit))
         raw_rows = self.cur.fetchall()
 
-        # If no results and mode was auto, try the other direction
+        # If no results and mode was auto, try the other direction.
         if not raw_rows and mode == "auto":
             alt_is_en = not is_en
-            alt_src_col = "en_lower" if alt_is_en else "tr_lower"
-            alt_sql = f"""
-            SELECT en, tr, type, category, {alt_src_col}
-            FROM bilingual
-            WHERE {alt_src_col} >= ? AND {alt_src_col} < ? {slang_filter}
-            ORDER BY 
-                CASE WHEN {alt_src_col} = ? THEN 0 ELSE 1 END,
-                CASE 
-                    WHEN category = 'Primary' THEN -3
-                    WHEN category = 'Idioms & Proverbs' THEN -2
-                    WHEN category = 'Common Usage' THEN -1
-                    WHEN category = 'CEFR A1' THEN 0
-                    WHEN category = 'CEFR A2' THEN 1
-                    WHEN category = 'CEFR B1' THEN 2
-                    WHEN category = 'CEFR B2' THEN 3
-                    WHEN category = 'CEFR C1' THEN 4
-                    WHEN category = 'CEFR C2' THEN 5
-                    WHEN category LIKE 'CEFR%' THEN 5
-                    WHEN category = 'Formal' THEN 6
-                    WHEN category = 'Temel Çekim' THEN 7
-                    WHEN category = 'İngilizce Düzensiz Fiil' THEN 8
-                    WHEN category = 'İngilizce Derecelendirme' THEN 9
-                    WHEN category = 'İngilizce Düzensiz Çoğul' THEN 10
-                    WHEN category = 'Curated Idioms' THEN 11
-                    WHEN category = 'Idioms' THEN 11
-                    WHEN category = 'Proverb' THEN 11
-                    WHEN category = 'Wiktionary' THEN 12
-                    WHEN category = 'Wiktionary / Çekim' THEN 13
-                    WHEN category = 'FreeDict' THEN 14
-                    WHEN category = 'General' THEN 15
-                    ELSE 16
-                END,
-                length({alt_src_col}) ASC
-            LIMIT ?;
-            """
-            self.cur.execute(alt_sql, (q_lower, upper_bound, q_lower, limit))
+            alt_sql = _SEARCH_SQL_EN if alt_is_en else _SEARCH_SQL_TR
+            self.cur.execute(alt_sql, (q_lower, upper_bound, show_slang, q_lower, limit))
             alt_rows = self.cur.fetchall()
             if alt_rows:
                 raw_rows = alt_rows
                 is_en = alt_is_en
                 direction = "en_tr" if is_en else "tr_en"
-                src_col = alt_src_col
 
         results = []
         for row in raw_rows:
@@ -432,7 +444,7 @@ class DictionaryDB:
                 candidates = get_turkish_candidates(query)
                 for cand in candidates:
                     cand_upper = cand + "\uffff"
-                    self.cur.execute(sql, (cand, cand_upper, cand, 10))
+                    self.cur.execute(sql, (cand, cand_upper, show_slang, cand, 10))
                     c_rows = self.cur.fetchall()
                     if c_rows:
                         for row in c_rows:
@@ -449,7 +461,7 @@ class DictionaryDB:
                 candidates = get_english_candidates(query)
                 for cand in candidates:
                     cand_upper = cand + "\uffff"
-                    self.cur.execute(sql, (cand, cand_upper, cand, 10))
+                    self.cur.execute(sql, (cand, cand_upper, show_slang, cand, 10))
                     c_rows = self.cur.fetchall()
                     if c_rows:
                         for row in c_rows:
