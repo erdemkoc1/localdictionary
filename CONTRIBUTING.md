@@ -23,7 +23,7 @@ Thank you for your interest in contributing to **LocalDictionary**!
    python -B -m unittest discover -s tests -v
    ```
 3. Commit your changes with clear, descriptive commit messages.
-4. Push to your branch and submit a Pull Request to `master`.
+4. Push to your branch and submit a Pull Request to `main`.
 
 ## Code Style & Guidelines
 - Follow standard Python PEP 8 formatting.

@@ -152,6 +152,7 @@ def build(make_zip: bool = True) -> tuple[Path, Path | None]:
     command = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
         "--windowed", "--noupx", "--name", TARGET_NAME,
+        "--specpath", str(BASE_DIR / "build"),
         "--collect-all", "customtkinter",
         "--collect-all", "pystray",
         "--collect-all", "PIL",
