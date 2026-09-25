@@ -1,8 +1,7 @@
-"""Build a redistributable dictionary database without restricted source data.
+"""Build a clean, redistributable SQLite dictionary database.
 
-The script is intentionally offline. It copies the local source database,
-removes legacy TDK/Webster tables and rows, deduplicates exact rows, adds release
-metadata, and refuses to replace the output unless SQLite quick_check passes.
+The build is offline, removes legacy definition tables, optionally removes
+source-specific categories, deduplicates rows, and verifies SQLite integrity.
 """
 
 from __future__ import annotations
@@ -13,13 +12,18 @@ import os
 import shutil
 import sqlite3
 from pathlib import Path
+from typing import Sequence
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT = BASE_DIR / "data" / "dictionary.db"
 DEFAULT_OUTPUT = BASE_DIR / "data" / "dictionary.public.db"
 
 
-def build_database(input_path: Path, output_path: Path) -> dict[str, int]:
+def build_database(
+    input_path: Path,
+    output_path: Path,
+    excluded_categories: Sequence[str] = (),
+) -> dict[str, int]:
     if input_path.resolve() == output_path.resolve():
         raise SystemExit("Input and output must be different files")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,11 +40,12 @@ def build_database(input_path: Path, output_path: Path) -> dict[str, int]:
 
         conn.execute("DROP TABLE IF EXISTS tr_definitions")
         conn.execute("DROP TABLE IF EXISTS en_definitions")
-        removed_restricted = conn.execute(
-            "DELETE FROM bilingual WHERE category = ?", ("TDK Atasözleri ve Deyimler",)
-        ).rowcount
+        removed_excluded = 0
+        for category in excluded_categories:
+            removed_excluded += conn.execute(
+                "DELETE FROM bilingual WHERE category = ?", (category,)
+            ).rowcount
 
-        # Preserve the oldest stable row for each exact normalized sense.
         conn.execute("""
             DELETE FROM bilingual
             WHERE id NOT IN (
@@ -63,7 +68,7 @@ def build_database(input_path: Path, output_path: Path) -> dict[str, int]:
             "dataset_kind": "full-offline-release",
             "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "bilingual_records": str(after),
-            "restricted_source_data_removed": "1",
+            "release_exclusions_applied": "1",
             "source_and_license_manifest": "DATA_LICENSES.md",
         }
         conn.executemany(
@@ -74,7 +79,6 @@ def build_database(input_path: Path, output_path: Path) -> dict[str, int]:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bi_tr ON bilingual(tr_lower)")
         conn.commit()
         conn.execute("VACUUM")
-
         quick_check = conn.execute("PRAGMA quick_check").fetchone()[0]
         if quick_check != "ok":
             raise RuntimeError(f"SQLite quick_check failed: {quick_check}")
@@ -89,8 +93,8 @@ def build_database(input_path: Path, output_path: Path) -> dict[str, int]:
     os.replace(temp_output, output_path)
     return {
         "before": int(before),
-        "removed_restricted": int(removed_restricted),
-        "duplicates_removed": int(before - removed_restricted - after),
+        "excluded_rows_removed": int(removed_excluded),
+        "duplicates_removed": int(before - removed_excluded - after),
         "after": int(after),
     }
 
@@ -99,8 +103,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--exclude-category",
+        action="append",
+        default=[],
+        help="Remove a source-specific category; may be repeated",
+    )
     args = parser.parse_args()
-    stats = build_database(args.input, args.output)
+    stats = build_database(args.input, args.output, args.exclude_category)
     print("Public database created:", args.output)
     for key, value in stats.items():
         print(f"{key}: {value:,}")
