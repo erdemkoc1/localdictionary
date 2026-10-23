@@ -15,7 +15,7 @@ dependencies = [
   "darkdetect==0.8.0",
   "pillow==12.3.0",
   "pystray==0.19.5",
-  "ctranslate2==4.8.2",
+  "ctranslate2==4.8.3",
   "sentencepiece==0.2.2",
 ]
 
