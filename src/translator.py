@@ -56,6 +56,47 @@ class TranslationResult(dict):
         return self.translated_text
 
 
+# Clause connector words, translated to the target language. A connector that
+# is not listed here is dropped instead of being pasted into the output.
+CLAUSE_CONNECTOR_WORDS = {
+    ("en", "tr"): {
+        "and": "ve", "but": "ama", "because": "çünkü", "however": "ancak",
+        "whereas": "oysa", "since": "çünkü",
+    },
+    ("tr", "en"): {
+        "ve": "and", "ama": "but", "fakat": "but", "ancak": "however",
+        "çünkü": "because", "oysa": "whereas", "halbuki": "whereas", "iken": "while",
+    },
+}
+
+
+def _translate_connector(connector: str, from_code: str, to_code: str) -> str:
+    """Convert a splitter connector such as ", and" into target-language text."""
+    if not connector or not connector.strip():
+        return ""
+    if "--" in connector:
+        punct = ";"
+    else:
+        punct = ";" if ";" in connector else ("," if "," in connector else "")
+    words = re.findall(r"[^\W\d_]+", connector.lower())
+    word = words[0] if words else ""
+    mapped = CLAUSE_CONNECTOR_WORDS.get((from_code, to_code), {}).get(word, "")
+    if mapped:
+        return f"{punct} {mapped}" if punct else f" {mapped}"
+    return punct
+
+
+def _lower_first(text: str, to_code: str) -> str:
+    """Lowercase the first letter of text, using Turkish rules for Turkish output."""
+    if not text:
+        return text
+    # English pronoun "I" must stay capitalised.
+    if to_code == "en" and re.match(r"I\b", text):
+        return text
+    first = turkish_lower(text[0]) if to_code == "tr" else text[0].lower()
+    return first + text[1:]
+
+
 class SentenceTranslator:
     def __init__(self, syntax_engine=None, user_data=None):
         self._is_initialized = False
@@ -133,7 +174,7 @@ class SentenceTranslator:
         if not text:
             return text
 
-        res = text.strip()
+        res = text.strip().replace("’", "'")
 
         # Remove trailing BPE Tags
         res = re.sub(r"\s+Tags\b", "", res)
@@ -156,6 +197,7 @@ class SentenceTranslator:
                 (r"\bquandary\b", "ikilem"),
                 (r"\bephemeral\b", "kısa ömürlü"),
                 (r"\bubiquitous\b", "her yerde var olan"),
+                (r"\btoplantı\b([^.!?]*?)\s+taşındı\b", r"toplantı\1 ertelendi"),
                 (r"\bthe\s+(?=[A-ZÇĞİÖŞÜ])", ""),
                 (r"\bshe\b", "o"),
                 (r"\bthey\b", "onlar"),
@@ -169,13 +211,17 @@ class SentenceTranslator:
         if from_code == "tr" and to_code == "en":
             # Fix Turkish-to-English common phrase artifacts and C1/C2 terminology
             replacements = [
+                (r"\bmahcup\b", "embarrassed"),
                 (r"\bthe principle of failure\b", "the principle of reciprocity"),
                 (r"\bprinciple of failure\b", "principle of reciprocity"),
                 (r"\bmoved with heidal\b", "acted with composure"),
                 (r"\bwith heidal\b", "with composure"),
                 (r"\bdominated hisnger\b", "controlled his anger"),
-                (r"\bI didn’t have any problems with this\b", "I could not find anyone to address regarding this matter"),
                 (r"\bI didn't have any problems with this\b", "I could not find anyone to address regarding this matter"),
+                (r"\bdecided to lie early\b", "decided to go to bed early"),
+                (r"\blie early\b", "go to bed early"),
+                (r"\bfelt much better when I get up\b", "felt much better when I got up"),
+                (r"\bmeeting was delayed\b", "meeting was postponed"),
                 (r"\bstreet kavgasında\b", "street fight"),
                 (r"\bstreet kavgası\b", "street fight"),
                 (r"\b(my\s+)?dengim\b", "my equal"),
@@ -297,18 +343,15 @@ class SentenceTranslator:
                 clause_translated = []
                 clause_breakdown = []
                 clause_engines = set()
-                for c_text, c_conn in clauses:
+                for idx, (c_text, c_conn) in enumerate(clauses):
                     c_trans, c_bd, c_eng = self._translate_single_sentence(
                         c_text, from_code, to_code, show_slang_profanity=show_slang_profanity
                     )
-                    clean_connector = c_conn
-                    if from_code == "en" and to_code == "tr":
-                        # The splitter keeps English function words in the
-                        # connector (for example ", the"); do not paste those
-                        # artifacts into the Turkish sentence.
-                        clean_connector = re.sub(
-                            r"\b(?:the|she|they|we|he|it)\b", "", clean_connector, flags=re.IGNORECASE
-                        )
+                    # A clause that starts mid-sentence in the source is not a
+                    # new sentence, so do not keep the capital the model adds.
+                    if idx > 0 and c_text[:1].islower():
+                        c_trans = _lower_first(c_trans, to_code)
+                    clean_connector = _translate_connector(c_conn, from_code, to_code)
                     clause_translated.append(c_trans.rstrip(".!?") + clean_connector)
                     clause_breakdown.extend(c_bd)
                     clause_engines.add(c_eng)

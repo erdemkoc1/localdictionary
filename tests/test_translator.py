@@ -66,6 +66,27 @@ class TestSentenceTranslator(unittest.TestCase):
         self.assertNotIn(" she ", f" {result.lower()} ")
         self.assertNotIn(" they ", f" {result.lower()} ")
 
+    def test_clause_connectors_are_translated_not_pasted(self):
+        en = "The sun was shining over the quiet village all morning long, and the children were playing near the old fountain."
+        res_tr = self.translator.translate(en, "en", "tr").translated_text
+        self.assertNotIn(", and", res_tr)
+        self.assertIn(" ve ", res_tr)
+
+        tr = "Hava bugün çok güzeldi, ama akşam aniden yağmur yağmaya başladı ve herkes eve koştu."
+        res_en = self.translator.translate(tr, "tr", "en").translated_text
+        self.assertNotIn(", ama", res_en)
+        self.assertIn(", but", res_en)
+
+    def test_clause_mid_sentence_is_not_capitalised(self):
+        text = (
+            "Although the empirical evidence seemed conclusive at first glance, "
+            "the researchers hesitated to publish their findings until the anomalies "
+            "were systematically eliminated."
+        )
+        result = self.translator.translate(text, "en", "tr").translated_text
+        self.assertNotIn(", A", result)
+        self.assertNotIn(" Araştırmacılar", result)
+
     def test_multisentence_slang_hybrid(self):
         text = "Benimle denk değilsin. Beni kimse sokak kavgasında yenemez. sikeyim seni."
         res = self.translator.translate(text, "tr", "en", show_slang_profanity=True)
@@ -73,6 +94,20 @@ class TestSentenceTranslator(unittest.TestCase):
         print(f"\n[MULTI-SENTENCE SLANG HYBRID TR->EN]:\nIN : {text}\nOUT: {res['translated_text']}")
         self.assertIn("fuck you", res_str)
         self.assertIn("street fight", res_str)
+
+    def test_tr_to_en_wording_and_apostrophes(self):
+        tr = "Ben çok yoruldum, o yüzden erken yatmaya karar verdim ve sabah kalkınca kendimi çok daha iyi hissettim."
+        res = self.translator.translate(tr, "tr", "en").translated_text
+        self.assertNotIn("lie early", res)
+        self.assertNotIn("when I get up", res)
+        self.assertNotIn("’", res)
+
+    def test_meeting_moved_and_embarrassed_vocabulary(self):
+        res = self.translator.translate("The meeting was moved to Thursday.", "en", "tr").translated_text
+        self.assertNotIn("taşındı", res)
+        self.assertIn("ertelendi", res)
+        res = self.translator.translate("Bence biraz mahcup oldu.", "tr", "en").translated_text
+        self.assertIn("embarrassed", res.lower())
 
     def test_greetings_and_titles(self):
         cases = [

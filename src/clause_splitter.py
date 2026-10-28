@@ -8,14 +8,14 @@ EN_CLAUSE_CONNECTORS = [
     r",\s+and\b", r",\s+but\b", r",\s+because\b", r",\s+although\b",
     r",\s+while\b", r",\s+whereas\b", r",\s+however\b", r",\s+since\b",
     r",\s+so\b", r",\s+until\b", r",\s+before\b", r",\s+after\b",
-    r",\s+(?:the|they|he|she|it|we|you|i|this|that|researchers?|scientists?|people)\b",
+    r",\s+(?=(?:the|they|he|she|it|we|you|i|this|that|researchers?|scientists?|people)\b)",
     r";\s*", r"\s+--\s+"
 ]
 
 TR_CLAUSE_CONNECTORS = [
     r",\s+ve\b", r",\s+ama\b", r",\s+fakat\b", r",\s+çünkü\b",
     r",\s+ancak\b", r",\s+oysa\b", r",\s+halbuki\b", r",\s+iken\b",
-    r",\s+(?:bu|o|onlar|biz|siz|ben|sen)\b",
+    r",\s+(?=(?:bu|o|onlar|biz|siz|ben|sen)\b)",
     r";\s*", r"\s+--\s+"
 ]
 

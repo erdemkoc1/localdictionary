@@ -12,6 +12,7 @@ MAX_GLOSSARY_NOTES_CHARS = 1_000
 MAX_CACHE_ROWS = 5_000
 MAX_CORRECTION_ROWS = 5_000
 MAX_GLOSSARY_ROWS = 5_000
+CACHE_KEY_VERSION = 3
 
 
 def normalize_user_text(text: str, language: str = "") -> str:
@@ -124,7 +125,9 @@ class UserDataManager:
     @staticmethod
     def _compute_cache_key(text: str, from_code: str, to_code: str, show_slang: bool) -> str:
         norm = normalize_user_text(text, from_code)
-        raw = f"{norm}|{from_code}|{to_code}|{1 if show_slang else 0}"
+        # Bump CACHE_KEY_VERSION whenever translation output changes so entries
+        # written by older, buggy pipelines are not served back.
+        raw = f"v{CACHE_KEY_VERSION}|{norm}|{from_code}|{to_code}|{1 if show_slang else 0}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     # =========================================================================
