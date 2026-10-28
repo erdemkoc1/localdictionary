@@ -27,6 +27,10 @@ from src.grammar_normalizer import normalize_pos, normalize_role
 from src.version import APP_VERSION
 from src.utils import get_resource_path
 
+# Material You color roles (light, dark). Keep in sync with assets/material_you.json.
+MUTED_TEXT = ("#49454F", "#CAC4D0")  # on-surface-variant
+SUCCESS_TEXT = ("#2e7d32", "#8FD694")
+
 
 def _apply_window_icon(window):
     """Apply the same blue LD mark to a Tk window and its title/taskbar icon."""
@@ -205,7 +209,7 @@ class SettingsWindow(ctk.CTkToplevel):
             top_frame,
             text=self.gt("settings_window_sub"),
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.lbl_sub.pack(anchor="w", pady=(2, 0))
 
@@ -257,7 +261,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_theme,
             text=self.gt("always_on_top_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.lbl_always_on_top_desc.pack(anchor="w", padx=16, pady=(0, 12))
 
@@ -315,7 +319,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_rc,
             text=self.gt("selection_translate_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -338,7 +342,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_rc,
             text=self.gt("double_click_translate_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -361,7 +365,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_rc,
             text=self.gt("ctrl_rc_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -412,7 +416,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_rc,
             text=self.gt("rc_inapp_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.lbl_inapp_desc.pack(anchor="w", padx=16, pady=(0, 12))
 
@@ -446,7 +450,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_start,
             text=self.gt("startup_enable_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.lbl_startup_desc.pack(anchor="w", padx=16, pady=(0, 10))
 
@@ -470,7 +474,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_start,
             text=self.gt("startup_mode_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -491,7 +495,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_tray,
             text=self.gt("tray_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="#4CAF50",
+            text_color=SUCCESS_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -513,7 +517,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_tray,
             text=self.gt("tray_minimize_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -546,7 +550,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_content,
             text=self.gt("slang_profanity_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=540,
             justify="left"
         )
@@ -579,7 +583,7 @@ class SettingsWindow(ctk.CTkToplevel):
             card_hist,
             text=self.gt("hist_save_desc"),
             font=ctk.CTkFont(size=11),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.lbl_hist_desc.pack(anchor="w", padx=16, pady=(0, 10))
 
@@ -700,12 +704,12 @@ class SettingsWindow(ctk.CTkToplevel):
         if val:
             self.lbl_win_ctx_desc.configure(
                 text=self.gt("win_ctx_desc") + "\n" + self.gt("win_ctx_active_notice"),
-                text_color="#4CAF50"
+                text_color=SUCCESS_TEXT
             )
         else:
             self.lbl_win_ctx_desc.configure(
                 text=self.gt("win_ctx_desc"),
-                text_color="gray"
+                text_color=MUTED_TEXT
             )
 
     def on_inapp_changed(self):
@@ -801,7 +805,7 @@ class GlossaryWindow(ctk.CTkToplevel):
             top_frame,
             text=self.gt("glossary_sub"),
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         lbl_sub.pack(anchor="w", pady=(2, 0))
 
@@ -955,7 +959,7 @@ class CorrectionDialog(ctk.CTkToplevel):
             top_frame,
             text=self.gt("correction_desc"),
             font=ctk.CTkFont(size=12),
-            text_color="gray",
+            text_color=MUTED_TEXT,
             wraplength=520,
             justify="left"
         )
@@ -1034,7 +1038,7 @@ class TranslatorApp(ctk.CTk):
         self.settings = SettingsManager(settings_file)
         self.current_theme = self.settings.get("theme", "dark")
         ctk.set_appearance_mode(self.current_theme)
-        ctk.set_default_color_theme("blue")
+        ctk.set_default_color_theme(get_resource_path(os.path.join("assets", "material_you.json")))
 
         # Window settings
         is_tr = self.settings.get("language", "tr") == "tr"
@@ -1194,7 +1198,7 @@ class TranslatorApp(ctk.CTk):
             self.header_frame, 
             text=self.gt("app_subtitle"), 
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.sub_label.pack(side="left", padx=0, pady=(15, 12))
 
@@ -1244,7 +1248,7 @@ class TranslatorApp(ctk.CTk):
             self.status_bar, 
             text=self.gt("status_ready"), 
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.status_left.pack(side="left", padx=18)
 
@@ -1252,7 +1256,7 @@ class TranslatorApp(ctk.CTk):
             self.status_bar, 
             text=self.gt("status_engine_badge"), 
             font=ctk.CTkFont(size=12),
-            text_color="#4CAF50"
+            text_color=SUCCESS_TEXT
         )
         self.status_right.pack(side="right", padx=18)
 
@@ -1261,7 +1265,7 @@ class TranslatorApp(ctk.CTk):
         dir_frame = ctk.CTkFrame(self.tab_dict, fg_color="transparent")
         dir_frame.pack(fill="x", padx=4, pady=(2, 6))
 
-        self.dict_dir_lbl = ctk.CTkLabel(dir_frame, text=self.gt("search_dir_lbl"), font=ctk.CTkFont(size=12), text_color="gray")
+        self.dict_dir_lbl = ctk.CTkLabel(dir_frame, text=self.gt("search_dir_lbl"), font=ctk.CTkFont(size=12), text_color=MUTED_TEXT)
         self.dict_dir_lbl.pack(side="left", padx=(0, 8))
 
         self.dir_selector = ctk.CTkSegmentedButton(
@@ -1320,7 +1324,7 @@ class TranslatorApp(ctk.CTk):
             self.dict_suggestion_frame,
             text="",
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.dict_suggestion_lbl.pack(side="left", padx=(10, 4), pady=2)
 
@@ -1406,7 +1410,7 @@ class TranslatorApp(ctk.CTk):
         opt_frame = ctk.CTkFrame(self.tab_sentence, fg_color="transparent")
         opt_frame.pack(fill="x", padx=6, pady=(4, 6))
 
-        self.sent_dir_lbl = ctk.CTkLabel(opt_frame, text=self.gt("sent_dir_lbl"), font=ctk.CTkFont(size=12), text_color="gray")
+        self.sent_dir_lbl = ctk.CTkLabel(opt_frame, text=self.gt("sent_dir_lbl"), font=ctk.CTkFont(size=12), text_color=MUTED_TEXT)
         self.sent_dir_lbl.pack(side="left", padx=(0, 8))
 
         self.sent_dir_selector = ctk.CTkSegmentedButton(
@@ -1444,7 +1448,7 @@ class TranslatorApp(ctk.CTk):
             self.sent_suggestion_frame,
             text="",
             font=ctk.CTkFont(size=12),
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         self.sent_suggestion_lbl.pack(side="left", padx=(10, 4), pady=2)
 
@@ -1885,7 +1889,7 @@ class TranslatorApp(ctk.CTk):
             self.quick_history_frame, 
             text=self.gt("recent_searches"), 
             font=ctk.CTkFont(size=11), 
-            text_color="gray"
+            text_color=MUTED_TEXT
         )
         lbl.pack(side="left", padx=(0, 6))
 
