@@ -1,11 +1,13 @@
+import math
 import os
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
-from PIL import Image
-from typing import Optional, List, Dict, Any
+from PIL import Image, ImageTk
+from typing import Optional, List, Dict, Any, Callable
 
 from src.db import DictionaryDB
 from src.history import HistoryManager
@@ -15,8 +17,9 @@ from src.spell_checker import SpellChecker
 from src.settings import SettingsManager
 from src.quick_translate import QuickTranslatePopup, QuickTranslateButton, GlobalQuickTranslateService, attach_context_menu
 from src.platform_win import (
-    set_app_user_model_id, 
-    set_windows_startup, 
+    set_app_user_model_id,
+    ensure_start_menu_shortcut,
+    set_windows_startup,
     get_windows_startup, 
     set_windows_context_menu, 
     get_windows_context_menu
@@ -30,6 +33,46 @@ from src.utils import get_resource_path
 # Material You color roles (light, dark). Keep in sync with assets/material_you.json.
 MUTED_TEXT = ("#49454F", "#CAC4D0")  # on-surface-variant
 SUCCESS_TEXT = ("#2e7d32", "#8FD694")
+TONAL_FG = ("#E8DEF8", "#4A4458")  # secondary-container
+TONAL_HOVER = ("#D9C9F5", "#5F4AA0")
+
+# Opening sequence: logo grows, drops to the top, then the search band rises from the bottom.
+INTRO_PILL_H = 52
+INTRO_LOGO_REST_UP = 56   # logo centre sits this many px above the window centre at rest
+INTRO_PILL_REST_DOWN = 40  # search pill centre sits this many px below the window centre at rest
+INTRO_LOGO_BIG = 150
+INTRO_LOGO_SMALL = 84
+INTRO_PILL_GAP = 12  # minimum space between the logo's bottom edge and the search bar's top edge
+INTRO_ICON_COLOUR = "#49454F"
+INTRO_PILL_FILL = "#E8E1EC"  # greyed so the bar stays visible on the light background
+INTRO_BG = {"light": "#FEF7FF", "dark": "#141218"}
+ROW_STREAM_FIRST = 12
+ROW_STREAM_CHUNK = 12
+ROW_STREAM_MS = 22
+
+
+def _ease_out_cubic(t: float) -> float:
+    return 1 - (1 - t) ** 3
+
+
+def _ease_in_out_cubic(t: float) -> float:
+    return 4 * t ** 3 if t < 0.5 else 1 - (-2 * t + 2) ** 3 / 2
+
+
+def _phase(elapsed_ms: float, start_ms: float, duration_ms: float, ease: Callable[[float], float]) -> float:
+    """Progress of one segment of a timeline, eased and clamped to 0..1."""
+    return ease(min(1.0, max(0.0, (elapsed_ms - start_ms) / duration_ms)))
+
+
+def _lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
+
+
+def _blend_hex(a: str, b: str, t: float) -> str:
+    """Colour between two #RRGGBB values; Tk canvas items have no alpha, so fades blend colours."""
+    rgb_a = [int(a[i:i + 2], 16) for i in (1, 3, 5)]
+    rgb_b = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02X%02X%02X" % tuple(round(_lerp(x, y, t)) for x, y in zip(rgb_a, rgb_b))
 
 
 def _apply_window_icon(window):
@@ -120,8 +163,8 @@ class HistoryWindow(ctk.CTkToplevel):
             btn_frame, 
             text=self.gt("btn_delete"), 
             width=85,
-            fg_color=("gray75", "gray35"),
-            hover_color=("gray65", "gray45"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             command=self.delete_selected
         )
         self.delete_btn.pack(side="left", padx=(0, 8))
@@ -130,8 +173,8 @@ class HistoryWindow(ctk.CTkToplevel):
             btn_frame, 
             text=self.gt("hist_clear_btn"), 
             width=130,
-            fg_color="#D32F2F",
-            hover_color="#B71C1C",
+            fg_color="#B3261E",
+            hover_color="#8C1D18",
             command=self.clear_all
         )
         self.clear_btn.pack(side="right")
@@ -185,8 +228,8 @@ class SettingsWindow(ctk.CTkToplevel):
         self.title(self.gt("settings_window_title"))
         self.geometry("660x680")
         self.minsize(540, 500)
+        # Not grab_set(): a modal grab kept the main window's buttons dead after a theme change.
         self.transient(parent)
-        _safe_grab(self)
 
         self.setup_ui()
 
@@ -380,11 +423,11 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         reg_ctx = get_windows_context_menu()
         desc_text = self.gt("win_ctx_desc")
-        desc_color = "gray"
+        desc_color = MUTED_TEXT
         if reg_ctx or self.settings.get("windows_context_menu", False):
             self.win_ctx_switch.select()
             desc_text += "\n" + self.gt("win_ctx_active_notice")
-            desc_color = "#4CAF50"
+            desc_color = SUCCESS_TEXT
         else:
             self.win_ctx_switch.deselect()
         self.win_ctx_switch.pack(anchor="w", padx=16, pady=(4, 2))
@@ -595,8 +638,8 @@ class SettingsWindow(ctk.CTkToplevel):
             text=self.gt("hist_clear_btn"),
             width=150,
             height=30,
-            fg_color=("gray75", "gray30"),
-            hover_color=("#D32F2F", "#B71C1C"),
+            fg_color=TONAL_FG,
+            hover_color=("#B3261E", "#8C1D18"),
             command=self.clear_all_history
         )
         self.btn_clear_hist.pack(side="left")
@@ -606,8 +649,8 @@ class SettingsWindow(ctk.CTkToplevel):
             text=self.gt("clear_all_data_btn"),
             width=210,
             height=30,
-            fg_color=("#D32F2F", "#B71C1C"),
-            hover_color=("#B71C1C", "#8E0000"),
+            fg_color=("#B3261E", "#8C1D18"),
+            hover_color=("#8C1D18", "#8E0000"),
             command=self.clear_all_local_data,
         )
         self.btn_clear_all_data.pack(side="left", padx=(10, 0))
@@ -867,8 +910,8 @@ class GlossaryWindow(ctk.CTkToplevel):
         self.del_btn = ctk.CTkButton(
             btn_frame,
             text=self.gt("glossary_del"),
-            fg_color="#D32F2F",
-            hover_color="#B71C1C",
+            fg_color="#B3261E",
+            hover_color="#8C1D18",
             width=130,
             command=self.delete_selected
         )
@@ -999,8 +1042,8 @@ class CorrectionDialog(ctk.CTkToplevel):
         self.cancel_btn = ctk.CTkButton(
             btn_frame,
             text=self.gt("sent_clear_btn"),
-            fg_color=("gray75", "gray35"),
-            hover_color=("gray65", "gray45"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             height=32,
             command=self.destroy
         )
@@ -1032,7 +1075,9 @@ class TranslatorApp(ctk.CTk):
         super().__init__()
 
         # Explicit Taskbar AppUserModelID
-        set_app_user_model_id("LocalDictionary.App.1.42")
+        set_app_user_model_id("LocalDictionary.App.1.42.0")
+        # Start Menu shortcut lets Windows Search find the app by name.
+        ensure_start_menu_shortcut()
 
         # 1. Load Settings & Configuration
         self.settings = SettingsManager(settings_file)
@@ -1112,15 +1157,195 @@ class TranslatorApp(ctk.CTk):
         if is_min:
             self.withdraw()
         else:
-            self.search_entry.focus()
             args = [a for a in sys.argv[1:] if a != "--minimized"]
             if args:
+                self.search_entry.focus()
                 query = " ".join(args).strip()
                 if os.path.exists(query) and os.path.isfile(query):
                     query = os.path.basename(query)
                 self.perform_search(query, save_to_history=False)
             else:
                 self.perform_search("welcome", save_to_history=False)
+                self.start_intro()
+
+    # ---------------- OPENING ANIMATION ----------------
+    def _is_dark_mode(self) -> bool:
+        if self.current_theme == "system":
+            try:
+                import darkdetect
+                return bool(darkdetect.isDark())
+            except Exception:
+                return False
+        return self.current_theme == "dark"
+
+    def _animate(self, duration_ms: float, step: Callable[[float], None], on_done: Optional[Callable[[], None]] = None,
+                 ease: Callable[[float], float] = _ease_out_cubic):
+        """Call step(eased_progress) about every 16 ms until duration_ms has passed."""
+        start = time.perf_counter()
+
+        def tick():
+            elapsed = (time.perf_counter() - start) * 1000
+            t = min(1.0, elapsed / duration_ms)
+            step(ease(t))
+            if t < 1.0:
+                self.after(16, tick)
+            elif on_done:
+                on_done()
+
+        tick()
+
+    def start_intro(self):
+        """Full-window splash: logo grows, moves to the top centre, then the search band slides up from the bottom."""
+        self.update_idletasks()
+        bg = INTRO_BG["dark" if self._is_dark_mode() else "light"]
+        self.intro_canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
+        self.intro_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        logo_path = get_resource_path(os.path.join("assets", "localdictionary.png"))
+        self._intro_logo_source = Image.open(logo_path).convert("RGBA")
+        self._intro_logo_size = 0
+        self._intro_photo = None
+        self._intro_logo_id = self.intro_canvas.create_image(0, 0)
+
+        self.intro_entry = ctk.CTkEntry(
+            self.intro_canvas,
+            width=560,
+            height=INTRO_PILL_H,
+            corner_radius=INTRO_PILL_H // 2,
+            border_width=0,
+            bg_color=bg,
+            fg_color=INTRO_PILL_FILL,
+            text_color="#1D1B20",
+            placeholder_text_color="#79747E",
+            placeholder_text=self.gt("search_placeholder"),
+            font=ctk.CTkFont(size=15),
+        )
+        self.intro_entry.bind("<Return>", self._intro_submit)
+        self.intro_entry.bind("<Escape>", lambda e: self._reveal_main_ui())
+        self._intro_entry_id = self.intro_canvas.create_window(0, 0, window=self.intro_entry)
+        # Embedded widgets paint over canvas items, so the magnifier gets its own white canvas placed after the entry.
+        self._intro_icon = tk.Canvas(self.intro_canvas, width=30, height=30, bg=INTRO_PILL_FILL, highlightthickness=0, bd=0, cursor="hand2")
+        self._intro_icon_ids = [
+            self._intro_icon.create_oval(4, 4, 20, 20, outline=INTRO_PILL_FILL, width=2.5),
+            self._intro_icon.create_line(18, 18, 26, 26, fill=INTRO_PILL_FILL, width=3, capstyle="round"),
+        ]
+        self._intro_icon.bind("<Button-1>", self._intro_submit)
+        self._intro_icon_win = self.intro_canvas.create_window(0, 0, window=self._intro_icon)
+
+        self._intro_bg = bg
+        self._intro_state = (INTRO_LOGO_BIG, 0.0, 0.0, 0.0)
+        self._intro_shake = 0.0
+        self._intro_entry_w = 560
+        self._intro_leaving = False
+        # Keep the logo and search pill centred while the window is resized.
+        self.intro_canvas.bind("<Configure>", lambda e: self._layout_intro())
+        self._run_intro_timeline()
+
+    def _run_intro_timeline(self):
+        total_ms = 2300  # the magnifier fade ends at 2250 ms
+        start = time.perf_counter()
+
+        def frame():
+            if self.intro_canvas is None:
+                return
+            elapsed = (time.perf_counter() - start) * 1000
+            h = self.intro_canvas.winfo_height()
+            if h > 50:
+                grow = _phase(elapsed, 0, 520, _ease_out_cubic)
+                drop = _phase(elapsed, 600, 600, _ease_in_out_cubic)
+                rise = _phase(elapsed, 900, 900, _ease_out_cubic)
+                icon = _phase(elapsed, 1800, 450, _ease_in_out_cubic)
+                logo_size = _lerp(INTRO_LOGO_BIG * 0.35, INTRO_LOGO_BIG, grow)
+                logo_size = _lerp(logo_size, INTRO_LOGO_SMALL, drop)
+                # Logo and pill settle into one centred group, logo above the pill.
+                logo_cy = _lerp(h / 2, h / 2 - INTRO_LOGO_REST_UP, drop)
+                # The pill slides up gently from below the window edge to its resting spot.
+                pill_cy = _lerp(h + INTRO_PILL_H, h / 2 + INTRO_PILL_REST_DOWN, rise)
+                # Never let the bar's top edge reach the logo's bottom edge, whatever the timing.
+                logo_bottom = logo_cy + logo_size / 2
+                pill_cy = max(pill_cy, logo_bottom + INTRO_PILL_GAP + INTRO_PILL_H / 2)
+                self._intro_state = (logo_size, logo_cy, pill_cy, icon)
+                self._layout_intro()
+            if elapsed < total_ms:
+                self.after(16, frame)
+
+        frame()
+
+    def _layout_intro(self):
+        c = self.intro_canvas
+        if c is None:
+            return
+        w = c.winfo_width()
+        h = c.winfo_height()
+        if w < 50 or h < 50:
+            return
+        logo_size, logo_cy, pill_cy, icon_fade = self._intro_state
+        size = max(2, int(round(logo_size)))
+        if size != self._intro_logo_size:
+            resized = self._intro_logo_source.resize((size, size), Image.LANCZOS)
+            self._intro_photo = ImageTk.PhotoImage(resized)
+            self._intro_logo_size = size
+            c.itemconfigure(self._intro_logo_id, image=self._intro_photo)
+        c.coords(self._intro_logo_id, w / 2, logo_cy)
+
+        # CTk widths are in logical units, canvas coordinates in physical pixels: convert with the widget scale.
+        scale = self.intro_entry._get_widget_scaling()
+        entry_w = min(560, int(w * 0.72 / scale))
+        if entry_w != self._intro_entry_w:
+            self._intro_entry_w = entry_w
+            self.intro_entry.configure(width=entry_w)
+        c.coords(self._intro_entry_id, w / 2 + self._intro_shake, pill_cy)
+
+        # The magnifier sits 34 logical px in from the bar's right end, centred vertically on the bar.
+        icon_x = w / 2 + entry_w * scale / 2 - 34 * scale + self._intro_shake
+        c.coords(self._intro_icon_win, icon_x, pill_cy)
+        # Fades in from the bar's own white, so it reads as drawn inside the bar.
+        icon_colour = _blend_hex(INTRO_PILL_FILL, INTRO_ICON_COLOUR, icon_fade)
+        self._intro_icon.itemconfigure(self._intro_icon_ids[0], outline=icon_colour)
+        self._intro_icon.itemconfigure(self._intro_icon_ids[1], fill=icon_colour)
+
+    def _intro_submit(self, event=None):
+        query = self.intro_entry.get().strip()
+        if not query:
+            self._shake_intro()
+            return
+        self.search_entry.delete(0, "end")
+        self.search_entry.insert(0, query)
+        self.perform_search(query)
+        self._reveal_main_ui()
+
+    def _shake_intro(self):
+        def step(t: float):
+            self._intro_shake = math.sin(t * math.pi * 4) * 12 * (1 - t)
+            self._layout_intro()
+
+        self._animate(380, step, ease=lambda t: t)
+
+    def _reveal_main_ui(self):
+        """Slides the splash away upward, uncovering the main window underneath."""
+        if self.intro_canvas is None or self._intro_leaving:
+            return
+        self._intro_leaving = True
+        self.detail_frame.configure(height=1)
+
+        def step(t: float):
+            if self.intro_canvas is not None:
+                self.intro_canvas.place_configure(rely=-t)
+
+        def done():
+            self._finish_intro()
+            self._animate(420, lambda t: self.detail_frame.configure(height=max(1, int(130 * t))))
+
+        self._animate(560, step, on_done=done, ease=_ease_in_out_cubic)
+
+    def _finish_intro(self):
+        if self.intro_canvas is None:
+            return
+        self.intro_entry.destroy()
+        self.intro_canvas.destroy()
+        self.intro_canvas = None
+        self.intro_entry = None
+        self.search_entry.focus()
 
     def quick_features_enabled(self) -> bool:
         """Return True only when at least one global interaction feature is enabled."""
@@ -1137,7 +1362,7 @@ class TranslatorApp(ctk.CTk):
         return self.settings.get_text(key)
 
     def show_fatal_error(self, msg: str):
-        card = ctk.CTkFrame(self, corner_radius=12, fg_color=("#F5F5F5", "#242424"))
+        card = ctk.CTkFrame(self, corner_radius=12, fg_color=("#F3EDF7", "#211F26"))
         card.pack(expand=True, fill="both", padx=40, pady=40)
         
         lbl_icon = ctk.CTkLabel(card, text="⚠️", font=("Segoe UI", 48))
@@ -1208,8 +1433,8 @@ class TranslatorApp(ctk.CTk):
             text=self.gt("settings_btn"), 
             width=90,
             height=30,
-            fg_color=("gray75", "gray30"),
-            hover_color=("gray65", "gray40"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             command=self.open_settings_window
         )
         self.settings_btn.pack(side="right", padx=16, pady=12)
@@ -1220,8 +1445,8 @@ class TranslatorApp(ctk.CTk):
             text=self.gt("history_btn"),
             width=85,
             height=30,
-            fg_color=("gray75", "gray30"),
-            hover_color=("gray65", "gray40"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             command=self.open_history_window
         )
         self.history_btn.pack(side="right", padx=(0, 10), pady=12)
@@ -1295,8 +1520,8 @@ class TranslatorApp(ctk.CTk):
             text=self.gt("clear_btn"),
             width=38,
             height=40,
-            fg_color=("gray75", "gray30"),
-            hover_color=("gray65", "gray40"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             command=self.clear_search
         )
         self.clear_btn.pack(side="left", padx=(0, 8))
@@ -1317,7 +1542,7 @@ class TranslatorApp(ctk.CTk):
         self.quick_history_frame.pack_propagate(False)
 
         # "Bunu mu demek istediniz?" Suggestion Banner
-        self.dict_suggestion_frame = ctk.CTkFrame(self.tab_dict, fg_color=("gray90", "gray22"), corner_radius=6, height=32)
+        self.dict_suggestion_frame = ctk.CTkFrame(self.tab_dict, fg_color=("#F3EDF7", "#2B2930"), corner_radius=6, height=32)
         self.dict_suggestion_frame.pack_propagate(False)
 
         self.dict_suggestion_lbl = ctk.CTkLabel(
@@ -1333,8 +1558,8 @@ class TranslatorApp(ctk.CTk):
             text="",
             font=ctk.CTkFont(size=12, weight="bold", underline=True),
             fg_color="transparent",
-            hover_color=("gray80", "gray30"),
-            text_color=("#1f538d", "#3B8ED0"),
+            hover_color=TONAL_HOVER,
+            text_color=("#6750A4", "#D0BCFF"),
             height=24,
             command=self.apply_dict_suggestion
         )
@@ -1441,7 +1666,7 @@ class TranslatorApp(ctk.CTk):
         self.sent_input.pack(fill="x", padx=6, pady=(0, 6))
 
         # "Bunu mu demek istediniz?" Suggestion Banner
-        self.sent_suggestion_frame = ctk.CTkFrame(self.tab_sentence, fg_color=("gray90", "gray22"), corner_radius=6, height=32)
+        self.sent_suggestion_frame = ctk.CTkFrame(self.tab_sentence, fg_color=("#F3EDF7", "#2B2930"), corner_radius=6, height=32)
         self.sent_suggestion_frame.pack_propagate(False)
 
         self.sent_suggestion_lbl = ctk.CTkLabel(
@@ -1457,8 +1682,8 @@ class TranslatorApp(ctk.CTk):
             text="",
             font=ctk.CTkFont(size=12, weight="bold", underline=True),
             fg_color="transparent",
-            hover_color=("gray80", "gray30"),
-            text_color=("#1f538d", "#3B8ED0"),
+            hover_color=TONAL_HOVER,
+            text_color=("#6750A4", "#D0BCFF"),
             height=24,
             command=self.apply_sent_suggestion
         )
@@ -1483,8 +1708,8 @@ class TranslatorApp(ctk.CTk):
             text=self.gt("sent_clear_btn"),
             width=85,
             height=32,
-            fg_color=("gray75", "gray35"),
-            hover_color=("gray65", "gray45"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             command=self.clear_sentence_inputs
         )
         self.sent_clear_btn.pack(side="left")
@@ -1493,7 +1718,7 @@ class TranslatorApp(ctk.CTk):
             self.sent_btn_frame,
             text="",
             font=ctk.CTkFont(size=12),
-            text_color="#3B8ED0"
+            text_color=("#6750A4", "#D0BCFF")
         )
         self.sent_loading_lbl.pack(side="left", padx=12)
 
@@ -1527,8 +1752,8 @@ class TranslatorApp(ctk.CTk):
             width=140,
             height=24,
             font=ctk.CTkFont(size=11),
-            fg_color=("gray75", "gray35"),
-            hover_color=("gray65", "gray45"),
+            fg_color=TONAL_FG,
+            hover_color=TONAL_HOVER,
             command=self.open_correction_dialog,
             state="disabled"
         )
@@ -1751,7 +1976,8 @@ class TranslatorApp(ctk.CTk):
             if sugg and sugg.strip().lower() != text.strip().lower():
                 self.sent_suggestion_lbl.configure(text=self.gt("sent_did_you_mean"))
                 self.sent_suggestion_btn.configure(text=sugg)
-                self.sent_suggestion_frame.pack(fill="x", padx=6, pady=(0, 6), before=self.sent_btn_frame)
+                # Shown under the translation result so the corrected input sits next to it.
+                self.sent_suggestion_frame.pack(fill="x", padx=6, pady=(0, 6), after=self.sent_output)
             else:
                 self.sent_suggestion_frame.pack_forget()
         except Exception as e:
@@ -1900,9 +2126,9 @@ class TranslatorApp(ctk.CTk):
                 text=q,
                 height=22,
                 font=ctk.CTkFont(size=11),
-                fg_color=("gray85", "gray25"),
-                text_color=("gray10", "gray90"),
-                hover_color=("gray75", "gray35"),
+                fg_color=("#E6E0E9", "#36343B"),
+                text_color=("#1D1B20", "#E6E0E9"),
+                hover_color=TONAL_FG,
                 command=lambda word=q: self.quick_search(word)
             )
             btn.pack(side="left", padx=3)
@@ -1929,21 +2155,21 @@ class TranslatorApp(ctk.CTk):
             mode = "dark" if darkdetect.isDark() else "light"
 
         if mode == "dark":
-            bg = "#2b2b2b"
+            bg = "#211F26"
             fg = "#f0f0f0"
-            field_bg = "#2b2b2b"
-            heading_bg = "#1f1f1f"
+            field_bg = "#211F26"
+            heading_bg = "#2B2930"
             heading_fg = "#ffffff"
-            sel_bg = "#1f538d"
+            sel_bg = "#4F378B"
             sel_fg = "#ffffff"
         else:
-            bg = "#ffffff"
-            fg = "#1a1a1a"
-            field_bg = "#ffffff"
-            heading_bg = "#e5e5e5"
-            heading_fg = "#1a1a1a"
-            sel_bg = "#3b8ed0"
-            sel_fg = "#ffffff"
+            bg = "#FEF7FF"
+            fg = "#1D1B20"
+            field_bg = "#FEF7FF"
+            heading_bg = "#E6E0E9"
+            heading_fg = "#1D1B20"
+            sel_bg = "#EADDFF"
+            sel_fg = "#21005D"
 
         for tv_name in ["Treeview"]:
             style.configure(
@@ -1997,10 +2223,29 @@ class TranslatorApp(ctk.CTk):
     def clear_results(self):
         if hasattr(self, "dict_suggestion_frame"):
             self.dict_suggestion_frame.pack_forget()
+        self._cancel_row_stream()
         for item in self.tree.get_children():
             self.tree.delete(item)
         self.current_results.clear()
         self.set_detail_text("")
+
+    def _cancel_row_stream(self):
+        job = getattr(self, "_row_stream_job", None)
+        if job:
+            self.after_cancel(job)
+            self._row_stream_job = None
+
+    def _stream_result_rows(self, results: List[Dict[str, Any]]):
+        """Adds result rows in small chunks so long result lists fill in smoothly instead of all at once."""
+        def insert_chunk(start: int, size: int):
+            self._row_stream_job = None
+            for r in results[start:start + size]:
+                self.tree.insert("", "end", values=(r["source"], r["type"], r["category"], r["target"]))
+            next_start = start + size
+            if next_start < len(results):
+                self._row_stream_job = self.after(ROW_STREAM_MS, lambda: insert_chunk(next_start, ROW_STREAM_CHUNK))
+
+        insert_chunk(0, ROW_STREAM_FIRST)
 
     def perform_search(self, query: str, save_to_history: bool = True):
         query = query.strip()
@@ -2022,12 +2267,12 @@ class TranslatorApp(ctk.CTk):
         show_slang = self.settings.get("show_slang_profanity", True)
         results, elapsed_ms, detected_dir = self.db.search(query, mode=mode, limit=100, show_slang_profanity=show_slang)
         
+        self._cancel_row_stream()
         for item in self.tree.get_children():
             self.tree.delete(item)
-        
+
         self.current_results = results
-        for r in results:
-            self.tree.insert("", "end", values=(r["source"], r["type"], r["category"], r["target"]))
+        self._stream_result_rows(results)
 
         children = self.tree.get_children()
         if children:
