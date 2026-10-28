@@ -162,6 +162,22 @@ def _write_release_readme() -> None:
     (APP_DIR / "RELEASE_README.txt").write_text(text, encoding="utf-8", newline="\n")
 
 
+def _build_uninstaller() -> Path:
+    """Build the standalone uninstall.exe; it lives under build/, never dist/."""
+    uninstall_dir = BASE_DIR / "build" / "uninstall"
+    command = [
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
+        "--noconsole", "--name", "uninstall",
+        "--icon", str(BASE_DIR / "assets" / "localdictionary.ico"),
+        "--specpath", str(uninstall_dir),
+        "--distpath", str(uninstall_dir / "dist"),
+        "--workpath", str(uninstall_dir / "work"),
+        str(BASE_DIR / "scripts" / "uninstaller.py"),
+    ]
+    _run(command)
+    return uninstall_dir / "dist" / "uninstall.exe"
+
+
 def _make_zip() -> Path:
     archive = DIST_DIR / f"LocalDictionary-v{APP_VERSION}-win64.zip"
     archive.unlink(missing_ok=True)
@@ -202,6 +218,7 @@ def build(make_zip: bool = True) -> tuple[Path, Path | None]:
     _run(command)
 
     _copy_release_assets()
+    shutil.copy2(_build_uninstaller(), APP_DIR / "uninstall.exe")
     _write_release_readme()
     _write_source_manifest()
     manifest = _write_checksums()

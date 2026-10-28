@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LocalDictionary - İndir</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --text: #e8eaf0;
+    --muted: #a7adbb;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) { --bg: #f5f6fa; --text: #161821; --muted: #4b5263; }
+  }
+  :root[data-theme="light"] { --bg: #f5f6fa; --text: #161821; --muted: #4b5263; }
+  :root[data-theme="dark"] { --bg: #0f1115; --text: #e8eaf0; --muted: #a7adbb; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    box-sizing: border-box;
+  }
+  h1 { margin: 0 0 8px; font-size: 28px; }
+  p.lead { margin: 0 0 28px; color: var(--muted); text-align: center; max-width: 520px; line-height: 1.5; }
+  .actions { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 440px; }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 24px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: #fff;
+    border: 2px solid;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+  .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .btn svg { width: 40px; height: 40px; flex: 0 0 auto; }
+  .btn .title { display: block; font-size: 20px; font-weight: 700; }
+  .btn .sub { display: block; font-size: 14px; opacity: 0.9; margin-top: 2px; }
+
+  .btn-primary { background: linear-gradient(180deg, #5b9dff, #2563eb); border-color: #1e40af; }
+  .btn-secondary { background: linear-gradient(180deg, #f87171, #dc2626); border-color: #991b1b; }
+
+  .notes { margin-top: 28px; max-width: 520px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .notes code { font-size: 13px; }
+  .shot { margin: 0 0 28px; width: 100%; max-width: 440px; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
+  h2.section-title { margin: 0 0 16px; font-size: 22px; }
+  .beta { margin-top: 20px; max-width: 520px; padding: 12px 16px; border-left: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.1); border-radius: 8px; }
+</style>
+</head>
+<body>
+  <h1>LocalDictionary</h1>
+  <p class="lead">
+    Tamamen çevrimdışı Türkçe–İngilizce sözlük ve çeviri uygulaması.
+    İnternet bağlantısı gerekmez, telemetri yoktur.
+    <br><span style="opacity:.85">Fully offline Turkish–English dictionary and translator. No internet needed, no telemetry.</span>
+  </p>
+
+  <figure class="shot">
+    <img src="localdictionary.png" alt="LocalDictionary uygulama görünümü" width="440" height="440">
+  </figure>
+
+  <h2 class="section-title">Downloads</h2>
+  <nav class="actions" aria-label="Downloads">
+    <a class="btn btn-primary"
+       href="https://github.com/erdemkoc1/localdictionary/releases/download/v1.42-beta.1/LocalDictionary-v1.42.0-beta.1-win64.zip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12M7 10l5 5 5-5M4 19h16"/>
+      </svg>
+      <span>
+        <span class="title">Download LocalDictionary</span>
+        <span class="sub">Portable Windows app · 357 MB (zip)</span>
+      </span>
+    </a>
+
+    <a class="btn btn-secondary"
+       href="https://github.com/erdemkoc1/localdictionary/releases/download/v1.42-beta.1/LocalDictionary-v1.42.0-beta.1-win64.zip.sha256">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12M7 10l5 5 5-5M4 19h16"/>
+      </svg>
+      <span>
+        <span class="title">Download SHA-256 checksum</span>
+        <span class="sub">İndirdiğiniz dosyanın bütünlüğünü doğrulayın · 107 bytes</span>
+      </span>
+    </a>
+  </nav>
+
+  <div class="notes">
+    <p>
+      <strong>Nasıl kullanılır:</strong> ZIP dosyasını bir klasöre çıkarın ve
+      <code>localdictionary.exe</code> dosyasını çalıştırın. Kurulum gerekmez.
+    </p>
+    <p>
+      Bu sürüm beta ve kod imzalı değildir. Çalıştırmadan önce indirdiğiniz dosyanın
+      SHA-256 değerini yukarıdaki kontrol dosyasıyla karşılaştırın.
+    </p>
+    <p>
+      Sistem: Windows 10/11, 64-bit. Kaldırmak için klasördeki <code>uninstall.exe</code> dosyasını çalıştırın.
+    </p>
+  </div>
+  <div class="beta">
+    <strong>Beta:</strong> Cümle çevirisi henüz beta aşamasında ve hazır değil; üzerinde çalışmaya devam ediyorum.
+  </div>
+</body>
+</html>
