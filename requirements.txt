@@ -1,8 +1,8 @@
-# Runtime dependencies (Windows x64, Python 3.10-3.12)
+# Runtime dependencies (Windows x64, Python 3.11-3.12)
 # Keep versions pinned: LocalDictionary uses native CTranslate2 models.
 customtkinter==6.0.0
 darkdetect==0.8.0
-pillow==12.3.0
+pillow==13.0.0
 pystray==0.19.5
 ctranslate2==4.8.2
 sentencepiece==0.2.2
