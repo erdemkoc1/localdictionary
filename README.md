@@ -2,10 +2,10 @@
 
 ## Downloads
 
-[![Download LocalDictionary](https://img.shields.io/badge/Download-LocalDictionary_(Windows_zip)-2563eb?style=for-the-badge)](https://github.com/erdemkoc1/localdictionary/releases/download/v1.42-beta.1/LocalDictionary-v1.42.0-beta.1-win64.zip)
-[![Download SHA-256 checksum](https://img.shields.io/badge/Download-SHA--256_checksum-dc2626?style=for-the-badge)](https://github.com/erdemkoc1/localdictionary/releases/download/v1.42-beta.1/LocalDictionary-v1.42.0-beta.1-win64.zip.sha256)
+[![Download LocalDictionary](https://img.shields.io/badge/Download-LocalDictionary_(Windows_zip)-2563eb?style=for-the-badge)](https://github.com/erdemkoc1/localdictionary/releases/download/v1.42-beta.2/LocalDictionary-v1.42.0-beta.2-win64.zip)
+[![Download SHA-256 checksum](https://img.shields.io/badge/Download-SHA--256_checksum-dc2626?style=for-the-badge)](https://github.com/erdemkoc1/localdictionary/releases/download/v1.42-beta.2/LocalDictionary-v1.42.0-beta.2-win64.zip.sha256)
 
-Portable Windows app, no installation needed. Unzip it and run `localdictionary.exe`. The zip is 357 MB.
+Portable Windows app, no installation needed. Unzip it and run `localdictionary.exe`. The zip is 584 MB.
 
 LocalDictionary is a Turkish–English dictionary and translation project.
 
