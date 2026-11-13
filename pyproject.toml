@@ -16,7 +16,7 @@ dependencies = [
   "pillow==13.0.0",
   "pystray==0.19.5",
   "ctranslate2==4.8.2",
-  "sentencepiece==0.2.2",
+  "sentencepiece==0.2.3",
 ]
 
 [tool.setuptools]
